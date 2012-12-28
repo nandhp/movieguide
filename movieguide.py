@@ -26,13 +26,15 @@ config.read(['movieguide.conf', 'movieguide.ini'])
 username = config.get('reddit', 'username')
 password = config.get('reddit', 'password')
 default_subreddit = config.get('reddit', 'subreddit')
+default_mode = config.get('reddit', 'mode')
 database = config.get('settings', 'database')
 footer = ''
 try:
     footerfile = config.get('settings', 'signature')
-    f = codecs.open(footerfile, 'r', 'utf-8')
-    footer = f.read()
-    f.close()
+    if footerfile:
+        f = codecs.open(footerfile, 'r', 'utf-8')
+        footer = f.read()
+        f.close()
 except ConfigParser.NoOptionError:
     pass
 
@@ -61,13 +63,17 @@ strip2re = re.compile(r'\([^\)]*\)|\[[^\]]*\]|:.*| *[-,;] *$|^ *[-,;] *',
 titlere = re.compile(r'\"(.+?)\"|^(.+)$',)
 strip3re = re.compile(r'^The *', flags=re.I)
 
-def process_movies(subreddit):
+def process_movies(subreddit, mode='new'):
     """Process new submissions to the subreddit."""
+
     # Get new submissions
-    print "Checking for new posts in /r/%s..." % subreddit
     sr = r.get_subreddit(subreddit)
+    func = subreddit_get_func(sr, mode)
+    print "Checking for %s posts in /r/%s..." % (mode, subreddit)
     lastsuccess = 0
-    items = sr.get_new_by_date(limit=100, url_data={'limit': 100})
+
+    items = func(limit=100, url_data={'limit': 100})
+
     for item in items:
         # FIXME: Track the most recent post that we've handled, continue
         #        until we hit our last timestamp.
@@ -75,6 +81,30 @@ def process_movies(subreddit):
         #     lastsuccess = item.created_utc
         handle_post(item)
     print "No more items in /r/%s." % subreddit
+
+def subreddit_get_func(sr, mode):
+    """Return function for obtaining posts by specified mode."""
+    if mode == 'new':
+        return sr.get_new_by_date
+    elif mode == 'rising':
+        return sr.get_new_by_rising
+    elif mode == 'hot':
+        return sr.get_hot
+    elif mode == 'top-all':
+        return sr.get_top_from_all
+    elif mode == 'top-year':
+        return sr.get_top_from_year
+    elif mode == 'top-month':
+        return sr.get_top_from_month
+    elif mode == 'top-week':
+        return sr.get_top_from_week
+    elif mode == 'top-day':
+        return sr.get_top_from_day
+    elif mode == 'top-hour':
+        return sr.get_top_from_hour
+    else:
+        raise ValueError('Unknown subreddit fetch mode')
+
 
 def handle_post(item):
     """
@@ -204,5 +234,5 @@ def write_disambiguation(results):
     return comment
 
 if __name__ == '__main__':
-    process_movies(default_subreddit)
+    process_movies(default_subreddit, default_mode)
 
