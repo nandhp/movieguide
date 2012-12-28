@@ -1,0 +1,2 @@
+CREATE TABLE history (postid text, status integer, commentid text);
+
