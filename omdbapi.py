@@ -34,12 +34,14 @@ def lookup(title=None, year=None, search=None, imdbid=None, fullplot=False):
 
     # Build URL
     data = {'plot': 'full' if fullplot else 'short'}
+    # Note: The OMDb API can't handle double-quotes in its input
+    #       (it returns an error in invalid JSON)
     if title:
-        data['t'] = str(title)
+        data['t'] = unicode(title).replace('"',"'").encode('utf-8')
     if year:
         data['y'] = str(year)
     if search:
-        data['s'] = str(search)
+        data['s'] = unicode(search).replace('"',"'").encode('utf-8')
     if imdbid:
         data['i'] = str(imdbid)
     url = 'http://www.omdbapi.com/?%s' % urllib.urlencode(data)
@@ -54,7 +56,20 @@ def lookup(title=None, year=None, search=None, imdbid=None, fullplot=False):
         data = sample_search
 
     # Parse response
-    obj = json.loads(data)
+    try:
+        obj = json.loads(data)
+    except ValueError:
+        if '"Response":"False"' in data:
+            raise OMDbError('Malformed failure response', None)
+        else:
+            raise
+
+    # If there are no votes, return 0 instead of N/A
+    if 'imdbRating' in obj and 'imdbVotes' in obj and \
+       (obj['imdbRating'] == 'N/A' or obj['imdbVotes'] == 'N/A'):
+        obj['imdbRating'] = 0
+        obj['imdbVotes'] = 0
+
     if search and 'Search' in obj:
         return obj['Search']
     elif 'Response' not in obj or obj['Response'] != 'True':
