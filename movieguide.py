@@ -62,6 +62,7 @@ strip2re = re.compile(r'\([^\)]*\)|\[[^\]]*\]|:.*| *[-,;] *$|^ *[-,;] *',
     flags=re.I)
 titlere = re.compile(r'\"(.+?)\"|^(.+)$',)
 strip3re = re.compile(r'^The *', flags=re.I)
+footersubre = re.compile(r'\{(\w+)\}')
 
 def process_movies(subreddit, mode='new'):
     """Process new submissions to the subreddit."""
@@ -115,7 +116,8 @@ def handle_post(item):
         4. Save a record in the database.
     """ 
     # Check if item has already been handled
-    print "Found http://redd.it/%s %s" % (item.id, item.title)
+    itemid = item.id
+    print "Found http://redd.it/%s %s" % (itemid, item.title)
     dbc.execute("SELECT * FROM history WHERE postid=?", [item.id])
     old = dbc.fetchone()
     if old: # and old.status[1] != 0
@@ -129,6 +131,13 @@ def handle_post(item):
     comment_status, comment_text = handle_movie(title, year)
     comment_id = None
     if comment_text:
+        def footersubfunc(match):
+            txt = match.group(1)
+            if txt == 'itemid':
+                return itemid
+            else:
+                return '(Error)'
+        comment_text += "\n\n" + re.sub(footersubre, footersubfunc, footer)
         print comment_text
         # Post review as a comment
         comment = item.add_comment(comment_text)
@@ -210,15 +219,13 @@ def write_review(movie):
 Director: %s; Writer: %s
 
 > %s
-
-%s""" % (
+""" % (
         movie["Title"], movie["Year"], omdbapi.imdb_url(movie),
         movie["Rated"], movie["Runtime"], # movie["Released"],
         movie["Genre"],
         rating_str, movie["imdbRating"], movie["imdbVotes"],
         movie["Actors"], movie["Director"], movie["Writer"],
         movie["Plot"], #movie["Poster"],
-        footer
     )
 
 def write_disambiguation(results):
@@ -230,7 +237,6 @@ def write_disambiguation(results):
     for movie in results:
         comment += "* [%s (%s)](%s)\n" \
             % (movie["Title"], movie["Year"], omdbapi.imdb_url(movie))
-    comment += "\n"+footer
     return comment
 
 if __name__ == '__main__':
