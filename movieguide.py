@@ -4,154 +4,67 @@ MovieGuide reddit bot
 """
 
 import praw
-import omdbapi
 import re
-import HTMLParser
+from HTMLParser import HTMLParser
 import sqlite3
 import ConfigParser
 import codecs
-from time import sleep
+import time
 
-user_agent = 'movieguide.py/0.1 (written by /u/nandhp)'
+import jsonapi
+from author import write_review
 
+user_agent = 'MovieGuide/0.2 (by /u/nandhp)'
 
+# Post statuses in database
 STATUS_WAITING = 0
 STATUS_NOMATCH = 1
 STATUS_PARTIAL = 2
 STATUS_EXACT = 5
 
-# Load configuration file
-config = ConfigParser.SafeConfigParser()
-config.read(['movieguide.conf', 'movieguide.ini'])
-username = config.get('reddit', 'username')
-password = config.get('reddit', 'password')
-default_subreddit = config.get('reddit', 'subreddit')
-default_mode = config.get('reddit', 'mode')
-database = config.get('settings', 'database')
-footer = ''
-try:
-    footerfile = config.get('settings', 'signature')
-    if footerfile:
-        f = codecs.open(footerfile, 'r', 'utf-8')
-        footer = f.read()
-        f.close()
-except ConfigParser.NoOptionError:
-    pass
-
-# Database for storing history
-print "Opening database..."
-db = sqlite3.connect(database)
-dbc = db.cursor()
-
-# Access reddit
-print "Connecting..."
-r = praw.Reddit(user_agent=user_agent)
-print "Logging in as %s..." % username
-r.login(username=username, password=password)
+# Regular expressions for mangling post titles
+spacere = re.compile(r'\s+', flags=re.UNICODE)
+strip1re = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|(?:1080|720)[pi]'
+    +r'|\d+x\d+|YouTube|Part *[0-9/]+)', #|[a-z]* *sub(title)?s?)',
+    flags=re.I|re.UNICODE)
+yearre = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d) *[\]\)\}]',
+    flags=re.UNICODE)
+strip2re = re.compile(r'\([^\)]*\)|\[[^\]]*\]',#|:.*| *[-,;] *$|^ *[-,;] *
+    flags=re.I|re.UNICODE)
+titlere = re.compile(r'\"(.+?)\"|^(.+)$', flags=re.UNICODE)
+#strip3re = re.compile(r'^The *', flags=re.I|re.UNICODE)
+footersubre = re.compile(r'\{(\w+)\}', flags=re.UNICODE)
 
 # For decoding HTML entities, which still show up in the praw output
-htmlparser = HTMLParser.HTMLParser()
+_htmlparser = HTMLParser()
 
-# Regular expressions for mangling post titles
-spacere = re.compile(r'\s+')
-strip1re = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|(?:1080|720)[pi]'
-    +r'|\d+x\d+|YouTube|Part *[0-9/]+|[a-z]* *sub(title)?s?)',
-    flags=re.I)
-yearre = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d) *[\]\)\}]')
-strip2re = re.compile(r'\([^\)]*\)|\[[^\]]*\]|:.*| *[-,;] *$|^ *[-,;] *',
-    flags=re.I)
-titlere = re.compile(r'\"(.+?)\"|^(.+)$',)
-strip3re = re.compile(r'^The *', flags=re.I)
-footersubre = re.compile(r'\{(\w+)\}')
-
-def process_movies(subreddit, mode='new'):
+def fetch_new_posts(r, db, subreddit, mode='new'):
     """Process new submissions to the subreddit."""
 
-    # Get new submissions
+    dbc = db.cursor()
     sr = r.get_subreddit(subreddit)
-    func = subreddit_get_func(sr, mode)
-    print "Checking for %s posts in /r/%s..." % (mode, subreddit)
-    lastsuccess = 0
 
-    items = func(limit=100, url_data={'limit': 100})
+    # Get new submissions
+    # Get correct PRAW function: new => get_new, top-year => get_top_from_year 
+    sr_get = getattr(sr, 'get_'+'_from_'.join(mode.split('-')))
+    print "Checking for %s posts in %s..." % (mode, str(sr))
 
-    for item in items:
+    posts = sr_get(limit=100)
+    count = 0
+    for post in posts:
         # FIXME: Track the most recent post that we've handled, continue
         #        until we hit our last timestamp.
-        # if lastsuccess < item.created_utc:
-        #     lastsuccess = item.created_utc
-        handle_post(item)
-    print "No more items in /r/%s." % subreddit
-
-def subreddit_get_func(sr, mode):
-    """Return function for obtaining posts by specified mode."""
-    if mode == 'new':
-        return sr.get_new_by_date
-    elif mode == 'rising':
-        return sr.get_new_by_rising
-    elif mode == 'hot':
-        return sr.get_hot
-    elif mode == 'top-all':
-        return sr.get_top_from_all
-    elif mode == 'top-year':
-        return sr.get_top_from_year
-    elif mode == 'top-month':
-        return sr.get_top_from_month
-    elif mode == 'top-week':
-        return sr.get_top_from_week
-    elif mode == 'top-day':
-        return sr.get_top_from_day
-    elif mode == 'top-hour':
-        return sr.get_top_from_hour
-    else:
-        raise ValueError('Unknown subreddit fetch mode')
-
-
-def handle_post(item):
-    """
-        Given a post object from praw:
-        1. Check the database to see if the post has been already seen.
-        2. Parse the title and look up movie data.
-        3. Post the comment, if any.
-        4. Save a record in the database.
-    """ 
-    # Check if item has already been handled
-    itemid = item.id
-    print "Found http://redd.it/%s %s" % (itemid, item.title)
-    dbc.execute("SELECT * FROM history WHERE postid=?", [item.id])
-    old = dbc.fetchone()
-    if old: # and old.status[1] != 0
-        print "Already handled %s." % item.id
-        return
-    # Parse item titles
-    title, year = parse_title(htmlparser.unescape(item.title))
-    print "Parsed title: %s (%s)" % (title, str(year))
-
-    # Generate a review
-    comment_status, comment_text = handle_movie(title, year)
-    comment_id = None
-    if comment_text:
-        def footersubfunc(match):
-            txt = match.group(1)
-            if txt == 'itemid':
-                return itemid
-            else:
-                return '(Error)'
-        comment_text += "\n\n" + re.sub(footersubre, footersubfunc, footer)
-        print comment_text
-        # Post review as a comment
-        comment = item.add_comment(comment_text)
-        comment_id = comment.id
-    else:
-        print "[Nothing to say]"
-
-    # Save to database
-    # if old: UPDATE
-    dbc.execute("INSERT INTO history(postid, status, commentid) VALUES (?, ?, ?)",
-                [item.id, comment_status, comment_id])
+        # if lastsuccess < post.created_utc:
+        #     lastsuccess = post.created_utc
+        dbc.execute("SELECT * FROM history WHERE postid=?", [post.id])
+        if not dbc.fetchone():
+            title = _htmlparser.unescape(post.title)
+            dbc.execute("INSERT INTO history(postid, posttitle, status)" +
+                " VALUES (?, ?, ?)", [post.id, title, STATUS_WAITING])
+            count += 1
     db.commit()
-    sleep(5)
-        
+    print "Found %d new posts from %s." % (count, str(sr))
+
 def parse_title(desc):
     """Given a title of a post, try to extract a movie title and year."""
     title = None
@@ -168,7 +81,7 @@ def parse_title(desc):
         desc = match.group(1)
 
     # Now that we've found the year, remove some additional data
-    replacements = 1 
+    replacements = 1
     while replacements > 0:
         desc, replacements = re.subn(strip2re, '', desc)
     desc = desc.strip()
@@ -181,64 +94,122 @@ def parse_title(desc):
                 title = group.strip()
     else:
         title = desc
-    # FIXME: Split on popular punctuation [-,;.:] to handle extra words
-    # at the beginning of the title. (Do this instead of deleting after ":".
-    title = re.sub(strip3re, '', title).strip()
+    ## FIXME: Split on popular punctuation [-,;.:] to handle extra words
+    ## at the beginning of the title. (Do this instead of deleting after ":".
+    #title = re.sub(strip3re, '', title).strip()
 
     # What did we get?
     return [title, year]
 
-def handle_movie(title, year):
-    """Look up a movie and return a review."""
-    try:
-        # Look up the record for this exact movie.
-        movie = omdbapi.lookup(title=title, year=year, fullplot=True)
-        return (STATUS_EXACT, write_review(movie))
-    except omdbapi.OMDbError:
-        # If we didn't find anything, try a search.
-        try:
-            results = omdbapi.lookup(search=title)
-            return (STATUS_PARTIAL, write_disambiguation(results))
-        except omdbapi.OMDbError:
-            # Wow; this movie doesn't exist at all.
-            return (STATUS_NOMATCH, None)
-
-
-def write_review(movie):
-    """We found the movie. Write a review."""
-    # Compute star rating
-    rating_int = int(round(float(movie["imdbRating"])))
-    rating_str = "&#9733;" * rating_int + "&#9734;" * (10 - rating_int)
-
-    # Build comment
-    return """**[%s (%s)](%s)** [%s, %s]    
-%s    
-%s %s/10 (%s votes)
-
-%s    
-Director: %s; Writer: %s
-
-> %s
-""" % (
-        movie["Title"], movie["Year"], omdbapi.imdb_url(movie),
-        movie["Rated"], movie["Runtime"], # movie["Released"],
-        movie["Genre"],
-        rating_str, movie["imdbRating"], movie["imdbVotes"],
-        movie["Actors"], movie["Director"], movie["Writer"],
-        movie["Plot"], #movie["Poster"],
-    )
-
-def write_disambiguation(results):
+def handle_posts(r, db, imdb, footer):
     """
-        We didn't find an exact match, but we found some similar movies.
-        Link to them.
+        Given a post object from praw:
+        1. Check the database to see if the post has been already seen.
+        2. Parse the title and look up movie data.
+        3. Post the comment, if any.
+        4. Save a record in the database.
     """ 
-    comment = "Sorry, I didn't find an exact match. Similar titles include:\n\n"
-    for movie in results:
-        comment += "* [%s (%s)](%s)\n" \
-            % (movie["Title"], movie["Year"], omdbapi.imdb_url(movie))
-    return comment
+
+    dbc = db.cursor()
+    pending = dbc.execute("SELECT postid, posttitle" +
+        " FROM history WHERE status=?", [STATUS_WAITING]).fetchall()
+
+    for row in pending:
+        postid, posttitle = row
+        # Check if item has already been handled
+        print "Found http://redd.it/%s %s" % (postid, posttitle)
+
+        # Parse item titles
+        title, year = parse_title(posttitle)
+        print "Parsed title: %s (%s)" % (title, str(year))
+
+        # Generate a review
+        try:
+            # Look up the record for this movie.
+            movie = imdb.search(title, year=year)
+            comment_text = write_review(movie)
+            comment_status = STATUS_EXACT
+        except jsonapi.IMDbError:
+            # Wow; this movie doesn't exist at all.
+            movie = None
+            comment_text = None
+            comment_status = STATUS_NOMATCH
+        comment_id = None
+
+        # FIXME: Trap SIGTERM for rest of iteration
+        if comment_text is not None:
+            def footersubfunc(match):
+                """Substitution handler for comment footer."""
+                txt = match.group(1)
+                if txt == 'itemid':
+                    return postid
+                elif txt == 'score' and '_score' in movie:
+                    return '%.2f' % (movie['_score'],)
+                else:
+                    return '(Error)'
+            comment_text += "\n\n" + re.sub(footersubre, footersubfunc, footer)
+            print comment_text
+            # Post review as a comment
+            post = praw.objects.Submission.from_id(r, postid)
+            comment = post.add_comment(comment_text)
+            comment_id = comment.id
+        else:
+            print "[Nothing to say]"
+
+        # Update database entry
+        movietitle = movie['title'] if movie else None
+        dbc.execute("UPDATE history SET status=?, commentid=?, title=?" +
+            " WHERE postid=?",
+            [comment_status, comment_id, movietitle, postid])
+        db.commit()
+        time.sleep(5)
+
+def main(interval=3):
+    """Main function, monitor every three minutes."""
+
+    # Load configuration file
+    config = ConfigParser.SafeConfigParser()
+    config.read(['movieguide.conf', 'movieguide.ini'])
+    r_conf = dict((i, config.get('reddit', i))
+        for i in ('username', 'password', 'subreddit', 'mode')) 
+    s_conf = dict((i, config.get('settings', i))
+        for i in ('database', 'imdburl'))
+    # Load footer
+    s_conf['footer'] = ''
+    try:
+        footerfile = config.get('settings', 'signature')
+        if footerfile:
+            f = codecs.open(footerfile, 'r', 'utf-8')
+            s_conf['footer'] = f.read()
+            f.close()
+    except ConfigParser.NoOptionError:
+        pass
+
+    # Database for storing history
+    print "Opening database..."
+    db = sqlite3.connect(s_conf['database'])
+
+    # Access reddit
+    print "Connecting..."
+    r = praw.Reddit(user_agent=user_agent)
+    print "Logging in as %s..." % r_conf['username']
+    r.login(username=r_conf['username'], password=r_conf['password'])
+
+    # IMDb API
+    imdb = jsonapi.IMDbAPI(s_conf['imdburl'])
+
+    while True:
+        # Download new posts from reddit
+        fetch_new_posts(r, db, r_conf['subreddit'], r_conf['mode'])
+        # Add reviews to new posts
+        handle_posts(r, db, imdb=imdb, footer=s_conf['footer'])
+        # Sleep a while
+        now = time.time()
+        delaysec = interval*60
+        print "Sleeping until %s (%d min)" % \
+            (time.ctime(now+delaysec), interval)
+        time.sleep(delaysec)
 
 if __name__ == '__main__':
-    process_movies(default_subreddit, default_mode)
+    main()
 

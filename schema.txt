@@ -1,2 +1,2 @@
-CREATE TABLE history (postid text, status integer, commentid text);
+CREATE TABLE history (postid TEXT NOT NULL PRIMARY KEY, status INTEGER, posttitle TEXT, commentid TEXT, title TEXT);
 
