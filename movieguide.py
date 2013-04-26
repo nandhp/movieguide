@@ -151,8 +151,14 @@ def handle_posts(r, db, imdb, footer):
             print comment_text
             # Post review as a comment
             post = praw.objects.Submission.from_id(r, postid)
-            comment = post.add_comment(comment_text)
-            comment_id = comment.id
+            try:
+                comment = post.add_comment(comment_text)
+                comment_id = comment.id
+            except praw.errors.APIException, e:
+                if e.error_type == 'TOO_OLD':
+                    print "[Can't post comment: archived by reddit]"
+                else:
+                    raise
         else:
             print "[Nothing to say]"
 
