@@ -155,7 +155,7 @@ def handle_posts(r, db, imdb, footer):
                 comment = post.add_comment(comment_text)
                 comment_id = comment.id
             except praw.errors.APIException, e:
-                if e.error_type == 'TOO_OLD':
+                if e.error_type in ('TOO_OLD','DELETED_LINK'):
                     print "[Can't post comment: archived by reddit]"
                 else:
                     raise
