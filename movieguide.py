@@ -25,12 +25,13 @@ STATUS_EXACT = 5
 # Regular expressions for mangling post titles
 spacere = re.compile(r'\s+', flags=re.UNICODE)
 strip1re = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|(?:1080|720)[pi]'
-    +r'|\d+x\d+|YouTube|Part *[0-9/]+)', #|[a-z]* *sub(title)?s?)',
-    flags=re.I|re.UNICODE)
+                      +r'|\d+x\d+|YouTube|Part *[0-9/]+|^[\[\{]*IJW[\]\}:]*)',
+                      #|[a-z]* *sub(title)?s?)',
+                      flags=re.I|re.UNICODE)
 yearre = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d) *[\]\)\}]',
-    flags=re.UNICODE)
+                    flags=re.UNICODE)
 strip2re = re.compile(r'\([^\)]*\)|\[[^\]]*\]',#|:.*| *[-,;] *$|^ *[-,;] *
-    flags=re.I|re.UNICODE)
+                      flags=re.I|re.UNICODE)
 titlere = re.compile(r'\"(.+?)\"|^(.+)$', flags=re.UNICODE)
 #strip3re = re.compile(r'^The *', flags=re.I|re.UNICODE)
 footersubre = re.compile(r'\{(\w+)\}', flags=re.UNICODE)
