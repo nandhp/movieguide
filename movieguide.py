@@ -72,8 +72,8 @@ def parse_title(desc):
     year = None
 
     # Strip useless data
-    desc = re.sub(spacere, ' ', desc).strip()
-    desc = re.sub(strip1re, '', desc).strip()
+    desc = spacere.sub(' ', desc).strip()
+    desc = strip1re.sub('', desc).strip()
 
     # Try to find the year first, so we can discard everything after it.
     match = re.search(yearre, desc)
@@ -84,11 +84,11 @@ def parse_title(desc):
     # Now that we've found the year, remove some additional data
     replacements = 1
     while replacements > 0:
-        desc, replacements = re.subn(strip2re, '', desc)
+        desc, replacements = strip2re.subn('', desc)
     desc = desc.strip()
 
     # Now pull out something that looks like a title.
-    match = re.search(titlere, desc)
+    match = titlere.search(desc)
     if match:
         for group in match.group(1, 2):
             if group:
@@ -97,7 +97,7 @@ def parse_title(desc):
         title = desc
     ## FIXME: Split on popular punctuation [-,;.:] to handle extra words
     ## at the beginning of the title. (Do this instead of deleting after ":".
-    #title = re.sub(strip3re, '', title).strip()
+    #title = strip3re.sub('', title).strip()
 
     # What did we get?
     return [title, year]
@@ -148,7 +148,7 @@ def handle_posts(r, db, imdb, footer):
                     return '%.2f' % (movie['_score'],)
                 else:
                     return '(Error)'
-            comment_text += "\n\n" + re.sub(footersubre, footersubfunc, footer)
+            comment_text += "\n\n" + footersubre.sub(footersubfunc, footer)
             print comment_text
             # Post review as a comment
             post = praw.objects.Submission.from_id(r, postid)

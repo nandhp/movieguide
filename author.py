@@ -2,7 +2,7 @@
 Review-writing module for MovieGuide
 """
 
-import urllib
+import re, urllib, random
 
 def grouped_num(num, char=',', size=3):
     """Impose digit grouping on integer num"""
@@ -17,6 +17,21 @@ def grouped_num(num, char=',', size=3):
         out.append(my_str[0:i])
     return char.join(reversed(out))
 
+# From snudown, &().- removed
+MARKDOWN_SPECIAL = re.compile(r'[\\`*_{}\[\]#+!:|<>/^~]', flags=re.UNICODE)
+def escape_markdown(data):
+    """Escape characters with special meaning in Markdown."""
+    def _replacement(match):
+        return '\\' + match.group(0)
+    return MARKDOWN_SPECIAL.sub(_replacement, data)
+
+QV_REGEXP = re.compile(r"(?:'(.+?)(?: \([A-Z]+\))?'|_(.+?)_) ?\(qv\)", flags=re.UNICODE)
+def strip_qv(data):
+    """Remove IMDb's qv-linking."""
+    def _replacement(match):
+        return match.group(1) or match.group(2)
+    return QV_REGEXP.sub(_replacement, data)
+
 def imdb_url(movie):
     """Build a URL to the IMDb page of a movie object."""
     return 'http://www.imdb.com/Title?%s' % \
@@ -29,19 +44,80 @@ def certificate_usa(text):
         url = 'TV_Parental_Guidelines#Ratings'
     else:
         url = 'Motion_Picture_Association_of_America_film_rating_system#Ratings'
-    return '[USA:%s](https://en.wikipedia.org/wiki/%s)' % (text, url)
+    return '[USA:%s](https://en.wikipedia.org/wiki/%s)' % \
+        (escape_markdown(text), url)
 
-certificate_funcs = {
+CERTIFICATE_FUNCS = {
     'USA': certificate_usa,
 }
+
+# Invent plots
+def invent_plot(movie):
+    generic_plot = [
+        "I have no idea what happens in this movie.",
+        "I haven't seen this movie; I don't know anything else about it.",
+        "This is one of those movies where there's nothing helpful " +
+        "printed on the back of the box.",
+    ]
+    bad_plot = [
+        "It looks bad to me, but what do I know: I'm just a bot.",
+        "Plot? I'm not sure this movie has a plot.",
+        random.choice(generic_plot) + " But it looks bad."
+    ]
+    good_plot = [
+        "People seem to like this movie. But writing plot summaries, " +
+        "apparently, not so much.",
+        "I don't know if there's a plot, but I hear it's not a bad movie.",
+        random.choice(generic_plot) + " But it looks good."
+    ]
+    if len(movie['cast']) > 8:
+        temp = random.choice(movie['cast'][6:])
+        if temp[0] and temp[1] and random.random() < 0.25:
+            temp = ("Well, I know %s plays %s in it. " +
+                    "I don't know anything else about it.") % \
+                (temp[0], temp[1])
+        elif temp[0]:
+            temp = "Hmm. Well, it has %s in it." % temp[0]
+        else:
+            temp = None
+        if temp:
+            generic_plot.append(temp)
+            good_plot.append(temp + " Maybe it's good.")
+    if len(movie['directors']) == 1 and movie['directors'][0][0]:
+        temp = 'Directed by %s.' % movie['directors'][0][0]
+        if 'M. Night Shyamalan' not in temp:
+            temp += ' Who is not M. Night Shyamalan.'
+        generic_plot.append(temp)
+        bad_plot.append(temp + " Maybe that's a bad sign?")
+    generic_plot += [
+        "In a world where there is no plot summary...",
+        "This space intentionally left blank."
+    ]
+    rating = float(movie["rating"][2])
+    if movie['certificates'] and 'X' in movie['certificates'][0]:
+        return "Plot? It's X-rated, it doesn't need a plot."
+    if 'Documentary' in movie['genres'] and random.random() < 0.8:
+        return "It's a documentary. I'm guessing the plot is thin."
+    if rating > 0.1 and rating < 3:
+        return random.choice(bad_plot)
+    if rating > 8:
+        return random.choice(good_plot)
+    return random.choice(generic_plot)
+
+# Possibly munge a name or two.
+def munge_name(name):
+    name = escape_markdown(name)
+    if name == 'Nicolas Cage':
+        return '[%s](/r/OneTrueGod)' % name
+    return name
 
 def write_review(movie):
     """We found the movie. Write a review."""
 
     temp_list = []
     # Compute certificate (film classification)
-    if movie['certificates'] and movie['certificates'][1] in certificate_funcs:
-        certificate_transform = certificate_funcs[movie['certificates'][1]]
+    if movie['certificates'] and movie['certificates'][1] in CERTIFICATE_FUNCS:
+        certificate_transform = CERTIFICATE_FUNCS[movie['certificates'][1]]
         temp_list.append(certificate_transform(movie['certificates'][0]))
     # Compute color info
     if movie['color_info']:
@@ -59,20 +135,22 @@ def write_review(movie):
     extra_info = ', '.join(temp_list)
     if extra_info:
         extra_info = '['+extra_info+']'
-    review = '**[%s](%s)** %s    \n' % (movie['title'],
+    review = '**[%s](%s)** %s    \n' % (escape_markdown(movie['title']),
         imdb_url(movie), extra_info)
     # OPTIONAL LINE: actual title, if not original title, that was best match 
     if 'aka' in movie and movie['aka']:
-        review += '&nbsp;&nbsp;&nbsp; a.k.a. **%s**    \n' % (movie['aka'],)
+        review += '&nbsp;&nbsp;&nbsp; a.k.a. **%s**    \n' % \
+                  (escape_markdown(movie['aka']),)
 
     # SECOND LINE: genres
     if movie['genres']:
-        review += ', '.join(movie['genres']) + "\n\n"
+        review += ', '.join(escape_markdown(g) for g in movie['genres'])
     else:
-        review += 'Unclassified\n\n'
+        review += 'Unclassified'
+    review += "\n\n"
 
     # THIRD LINE: Cast, directors, writers.
-    names_strs = [', '.join(i[0] for i in movie[field][:4])
+    names_strs = [', '.join(munge_name(i[0]) for i in movie[field][:4])
         for field in 'cast', 'directors', 'writers']
     if movie['cast']:
         review += names_strs[0] + "    \n" # Cast
@@ -99,14 +177,25 @@ def write_review(movie):
         rating_str = "Unknown; awaiting five votes"
     # Plot summary
     if movie['plot'] and movie['plot'][0]:
-        plot_str = '> ' + movie['plot'][0]
+        plot_str = '> ' + escape_markdown(strip_qv(movie['plot'][0]))
         if movie['plot'][1]:
             plot_str += ' *[by %s]*' % movie['plot'][1]
     else:
-        plot_str = "> *I have no idea what happens in this movie.*"
+        # Can't find a plot; let's just make something up.
+        plot_str = "> *%s*" % invent_plot(movie)
 
     review += "----\n\n**IMDb user rating:** %s\n%s\n\n----\n\n" % \
         (rating_str, plot_str)
 
     return review
 
+def _main(title):
+    import jsonapi
+    movie = jsonapi.IMDbAPI('http://localhost:8051/imdb').search(title)
+    print invent_plot(movie)
+    print
+    print write_review(movie)
+
+if __name__ == '__main__':
+    import sys
+    _main(sys.argv[1])
