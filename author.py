@@ -18,19 +18,22 @@ def grouped_num(num, char=',', size=3):
     return char.join(reversed(out))
 
 # From snudown, &().- removed
-MARKDOWN_SPECIAL = re.compile(r'[\\`*_{}\[\]#+!:|<>/^~]', flags=re.UNICODE)
+MARKDOWN_SPECIAL_RE = re.compile(r'[\\`*_{}\[\]#+!:|<>/^~]', flags=re.UNICODE)
 def escape_markdown(data):
     """Escape characters with special meaning in Markdown."""
     def _replacement(match):
+        """Backslash-escape all characters matching MARKDOWN_SPECIAL_RE."""
         return '\\' + match.group(0)
-    return MARKDOWN_SPECIAL.sub(_replacement, data)
+    return MARKDOWN_SPECIAL_RE.sub(_replacement, data)
 
-QV_REGEXP = re.compile(r"(?:'(.+?)(?: \([A-Z]+\))?'|_(.+?)_) ?\(qv\)", flags=re.UNICODE)
+QV_RE = re.compile(r"(?:'(.+?)(?: \([A-Z]+\))?'|_(.+?)_) ?\(qv\)",
+                       flags=re.UNICODE)
 def strip_qv(data):
     """Remove IMDb's qv-linking."""
     def _replacement(match):
+        """Return first or second group from QV_RE."""
         return match.group(1) or match.group(2)
-    return QV_REGEXP.sub(_replacement, data)
+    return QV_RE.sub(_replacement, data)
 
 def imdb_url(movie):
     """Build a URL to the IMDb page of a movie object."""
@@ -53,6 +56,7 @@ CERTIFICATE_FUNCS = {
 
 # Invent plots
 def invent_plot(movie):
+    """Invent a plot summary if IMDb doesn't provide one."""
     generic_plot = [
         "I have no idea what happens in this movie.",
         "I haven't seen this movie; I don't know anything else about it.",
@@ -104,8 +108,8 @@ def invent_plot(movie):
         return random.choice(good_plot)
     return random.choice(generic_plot)
 
-# Possibly munge a name or two.
 def munge_name(name):
+    """Escape markdown in (and possibly munge) names."""
     name = escape_markdown(name)
     if name == 'Nicolas Cage':
         return '[%s](/r/OneTrueGod)' % name
@@ -190,12 +194,12 @@ def write_review(movie):
     return review
 
 def _main(title):
-    import jsonapi
+    """Utility function for command-line testing."""
     movie = jsonapi.IMDbAPI('http://localhost:8051/imdb').search(title)
     print invent_plot(movie)
     print
     print write_review(movie)
 
 if __name__ == '__main__':
-    import sys
+    import sys, jsonapi
     _main(sys.argv[1])

@@ -14,7 +14,7 @@ import time
 import jsonapi
 from author import write_review
 
-user_agent = 'MovieGuide/0.2 (by /u/nandhp)'
+USER_AGENT = 'MovieGuide/0.2 (by /u/nandhp)'
 
 # Post statuses in database
 STATUS_WAITING = 0
@@ -23,31 +23,34 @@ STATUS_PARTIAL = 2
 STATUS_EXACT = 5
 
 # Regular expressions for mangling post titles
-spacere = re.compile(r'\s+', flags=re.UNICODE)
-strip1re = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|(?:1080|720)[pi]'
-                      +r'|\d+x\d+|YouTube|Part *[0-9/]+|^[\[\{]*IJW[\]\}:]*)',
-                      #|[a-z]* *sub(title)?s?)',
-                      flags=re.I|re.UNICODE)
-yearre = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d) *[\]\)\}]',
-                    flags=re.UNICODE)
-strip2re = re.compile(r'\([^\)]*\)|\[[^\]]*\]',#|:.*| *[-,;] *$|^ *[-,;] *
-                      flags=re.I|re.UNICODE)
-titlere = re.compile(r'\"(.+?)\"|^(.+)$', flags=re.UNICODE)
-#strip3re = re.compile(r'^The *', flags=re.I|re.UNICODE)
-footersubre = re.compile(r'\{(\w+)\}', flags=re.UNICODE)
+SPACE_RE = re.compile(r'\s+', flags=re.UNICODE)
+STRIP1_RE = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|(?:1080|720)[pi]' +
+                       r'|\d+x\d+|YouTube|Part *[0-9/]+' +
+                       r'|^ *[\[\{]* *IJW *[\]\}:]*)',
+                       #|[a-z]* *sub(title)?s?)',
+                       flags=re.I|re.UNICODE)
+YEAR_RE = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d)' +
+                     r'*[\]\)\}]', flags=re.UNICODE)
+STRIP2_RE = re.compile(r'\([^\)]*\)|\[[^\]]*\]',
+                       #|:.*| *[-,;] *$|^ *[-,;] *
+                       flags=re.I|re.UNICODE)
+TITLE_RE = re.compile(r'\"(.+?)\"|^(.+)$', flags=re.UNICODE)
+#STRIP3_RE = re.compile(r'^The *', flags=re.I|re.UNICODE)
+FOOTER_SUBST_RE = re.compile(r'\{(\w+)\}', flags=re.UNICODE)
 
-# For decoding HTML entities, which still show up in the praw output
-_htmlparser = HTMLParser()
-
-def fetch_new_posts(r, db, subreddit, mode='new'):
+def fetch_new_posts(reddit, db, subreddit, mode='new'):
     """Process new submissions to the subreddit."""
 
+    # For decoding HTML entities, which still show up in the praw output
+    _htmlparser = HTMLParser()
+    # Database cursor
     dbc = db.cursor()
-    sr = r.get_subreddit(subreddit)
+
+    sr = reddit.get_subreddit(subreddit)
 
     # Get new submissions
     # Get correct PRAW function: new => get_new, top-year => get_top_from_year 
-    sr_get = getattr(sr, 'get_'+'_from_'.join(mode.split('-')))
+    sr_get = getattr(sr, 'get_' + '_from_'.join(mode.split('-')))
     print "Checking for %s posts in %s..." % (mode, str(sr))
 
     posts = sr_get(limit=100)
@@ -72,11 +75,11 @@ def parse_title(desc):
     year = None
 
     # Strip useless data
-    desc = spacere.sub(' ', desc).strip()
-    desc = strip1re.sub('', desc).strip()
+    desc = SPACE_RE.sub(' ', desc).strip()
+    desc = STRIP1_RE.sub('', desc).strip()
 
     # Try to find the year first, so we can discard everything after it.
-    match = re.search(yearre, desc)
+    match = re.search(YEAR_RE, desc)
     if match:
         year = int(match.group(2))
         desc = match.group(1)
@@ -84,11 +87,11 @@ def parse_title(desc):
     # Now that we've found the year, remove some additional data
     replacements = 1
     while replacements > 0:
-        desc, replacements = strip2re.subn('', desc)
+        desc, replacements = STRIP2_RE.subn('', desc)
     desc = desc.strip()
 
     # Now pull out something that looks like a title.
-    match = titlere.search(desc)
+    match = TITLE_RE.search(desc)
     if match:
         for group in match.group(1, 2):
             if group:
@@ -97,12 +100,12 @@ def parse_title(desc):
         title = desc
     ## FIXME: Split on popular punctuation [-,;.:] to handle extra words
     ## at the beginning of the title. (Do this instead of deleting after ":".
-    #title = strip3re.sub('', title).strip()
+    #title = STRIP3_RE.sub('', title).strip()
 
     # What did we get?
     return [title, year]
 
-def handle_posts(r, db, imdb, footer):
+def handle_posts(reddit, db, imdb, footer):
     """
         Given a post object from praw:
         1. Check the database to see if the post has been already seen.
@@ -148,15 +151,15 @@ def handle_posts(r, db, imdb, footer):
                     return '%.2f' % (movie['_score'],)
                 else:
                     return '(Error)'
-            comment_text += "\n\n" + footersubre.sub(footersubfunc, footer)
+            comment_text += "\n\n" + FOOTER_SUBST_RE.sub(footersubfunc, footer)
             print comment_text
             # Post review as a comment
-            post = praw.objects.Submission.from_id(r, postid)
+            post = praw.objects.Submission.from_id(reddit, postid)
             try:
                 comment = post.add_comment(comment_text)
                 comment_id = comment.id
-            except praw.errors.APIException, e:
-                if e.error_type in ('TOO_OLD','DELETED_LINK'):
+            except praw.errors.APIException, exception:
+                if exception.error_type in ('TOO_OLD','DELETED_LINK'):
                     print "[Can't post comment: archived by reddit]"
                 else:
                     raise
@@ -186,9 +189,9 @@ def main(interval=3):
     try:
         footerfile = config.get('settings', 'signature')
         if footerfile:
-            f = codecs.open(footerfile, 'r', 'utf-8')
-            s_conf['footer'] = f.read()
-            f.close()
+            footerfh = codecs.open(footerfile, 'r', 'utf-8')
+            s_conf['footer'] = footerfh.read()
+            footerfh.close()
     except ConfigParser.NoOptionError:
         pass
 
@@ -198,18 +201,18 @@ def main(interval=3):
 
     # Access reddit
     print "Connecting..."
-    r = praw.Reddit(user_agent=user_agent)
+    reddit = praw.Reddit(user_agent=USER_AGENT)
     print "Logging in as %s..." % r_conf['username']
-    r.login(username=r_conf['username'], password=r_conf['password'])
+    reddit.login(username=r_conf['username'], password=r_conf['password'])
 
     # IMDb API
     imdb = jsonapi.IMDbAPI(s_conf['imdburl'])
 
     while True:
         # Download new posts from reddit
-        fetch_new_posts(r, db, r_conf['subreddit'], r_conf['mode'])
+        fetch_new_posts(reddit, db, r_conf['subreddit'], r_conf['mode'])
         # Add reviews to new posts
-        handle_posts(r, db, imdb=imdb, footer=s_conf['footer'])
+        handle_posts(reddit, db, imdb=imdb, footer=s_conf['footer'])
         # Sleep a while
         now = time.time()
         delaysec = interval*60
