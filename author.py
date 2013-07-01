@@ -26,7 +26,7 @@ def escape_markdown(data):
         return '\\' + match.group(0)
     return MARKDOWN_SPECIAL_RE.sub(_replacement, data)
 
-QV_RE = re.compile(r"(?:'(.+?)(?: \([A-Z]+\))?'|_(.+?)_) ?\(qv\)",
+QV_RE = re.compile(r"(?:'([^']+?)(?: \([A-Z]+\))?'|_([^_]+?)_) ?\(qv\)",
                        flags=re.UNICODE)
 def strip_qv(data):
     """Remove IMDb's qv-linking."""
