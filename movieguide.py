@@ -16,6 +16,9 @@ from author import write_review
 
 USER_AGENT = 'MovieGuide/0.2 (by /u/nandhp)'
 
+# Polling interval
+INTERVAL=3
+
 # Post statuses in database
 STATUS_WAITING = 0
 STATUS_NOMATCH = 1
@@ -115,8 +118,12 @@ def handle_posts(reddit, db, imdb, footer):
     """ 
 
     dbc = db.cursor()
-    pending = dbc.execute("SELECT postid, posttitle" +
-        " FROM history WHERE status=?", [STATUS_WAITING]).fetchall()
+    pending = dbc.execute("SELECT postid, posttitle FROM history " +
+                          "WHERE status=? ORDER BY postid DESC",
+                          [STATUS_WAITING]).fetchall()
+
+    # Don't spend more than two intervals processing posts
+    end_time = time.time() + 2*INTERVAL*60
 
     for row in pending:
         postid, posttitle = row
@@ -172,9 +179,16 @@ def handle_posts(reddit, db, imdb, footer):
             " WHERE postid=?",
             [comment_status, comment_id, movietitle, postid])
         db.commit()
-        time.sleep(5)
 
-def main(interval=3):
+        time.sleep(5)
+        # If we're taking to long, pause and come back
+        if time.time() > end_time:
+            return False
+
+    # We have finished processing all posts, return true.
+    return True
+
+def main():
     """Main function, monitor every three minutes."""
 
     # Load configuration file
@@ -212,13 +226,15 @@ def main(interval=3):
         # Download new posts from reddit
         fetch_new_posts(reddit, db, r_conf['subreddit'], r_conf['mode'])
         # Add reviews to new posts
-        handle_posts(reddit, db, imdb=imdb, footer=s_conf['footer'])
-        # Sleep a while
-        now = time.time()
-        delaysec = interval*60
-        print "Sleeping until %s (%d min)" % \
-            (time.ctime(now+delaysec), interval)
-        time.sleep(delaysec)
+        if handle_posts(reddit, db, imdb=imdb, footer=s_conf['footer']):
+            # Sleep a while
+            now = time.time()
+            delaysec = INTERVAL*60
+            print "Sleeping until %s (%d min)" % \
+                (time.ctime(now+delaysec), interval)
+            time.sleep(delaysec)
+        else:
+            print "Not finished handling posts, not sleeping"
 
 if __name__ == '__main__':
     main()
