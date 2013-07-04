@@ -48,7 +48,7 @@ class IMDbAPI(object):
         if True:
             headers = {'User-Agent': USER_AGENT}
             req = urllib2.Request(url, None, headers)
-            response = urllib2.urlopen(req)
+            response = urllib2.urlopen(req, timeout=8*60)
             data = response.read()
         #else:
         #    data = _SAMPLE_DATA
