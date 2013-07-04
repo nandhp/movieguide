@@ -1,0 +1,49 @@
+# Example configuration file for MovieGuide
+
+[reddit]
+
+# Username and password for logging in to reddit.
+username=MovieGuide
+password=secret
+
+# Subredit to monitor (a multireddit works too).
+subreddit=MovieGuide_sandbox+example+null
+
+# Mode for fetching {new,rising,hot,top-{hour,day,week,month,year,all}}.
+mode=new
+
+[settings]
+
+# Database file to store current state, history, etc.
+database=movieguide.db
+
+# Signature file to sign posts with (optional).
+#
+# This file will be inserted at the end of every comment, with the
+# following substitutions:
+#     {itemid}    item ID of the post being commented on.
+#     {score}     confidence score from the IMDb search.
+# Example:
+#     *I am a bot.* [Send me feedback]
+#     (/message/compose?to=nobody&subject=Re:%20http://redd.it/{itemid}
+#     "Confidence: {score}").
+signature=signature.txt
+
+# URL for IMDb API endpoint.
+imdburl=http://localhost:8051/imdb
+
+# Filename to store heartbeat (optional).
+heartbeat=/tmp/movieguide-heartbeat
+
+[backup]
+# (Optional) settings for database backups. Comment out these options
+# if you don't want to send backups.
+
+# URL for POSTing database backups.
+url=http://www.myserver.example/backup
+
+# POST-data template for database backups.
+#
+# Use interpolation %%(data)s, %%(type)s, and %%(checksum)s. Note that
+# we are escaping % as %% to avoid ConfigParser's own interpolation.
+template=d=%%(data)s&t=%%(type)s&sha1=%%(checksum)s
