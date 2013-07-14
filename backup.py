@@ -77,7 +77,7 @@ def run_backup(database_file, post_url, post_data,
     # Send message
     if True:
         print "  Sending %d bytes..." % len(message)
-        obj = urllib2.urlopen(post_url, postdata)
+        obj = urllib2.urlopen(post_url, postdata, timeout=2*60)
         assert(obj.getcode() == 200)
         print "  Backup complete."
     else:

@@ -28,16 +28,17 @@ STATUS_EXACT = 5
 
 # Regular expressions for mangling post titles
 SPACE_RE = re.compile(r'\s+', flags=re.UNICODE)
-STRIP1_RE = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|(?:1080|720)[pi]' +
-                       r'|\d+x\d+|YouTube|Part *[0-9/]+' +
-                       r'|^ *[\[\{]* *IJW *[\]\}:]*)',
+STRIP1_RE = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|'+
+                       r'(?:1080|720|480)[pi]|' +
+                       r'YouTube|Netflix|\d+x\d+|Part *[0-9/]+|' +
+                       r'^ *[\[\{]* *IJW *[\]\}:]*)',
                        #|[a-z]* *sub(title)?s?)',
                        flags=re.I|re.UNICODE)
 YEAR_RE = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d)' +
-                     r'*[\]\)\}]', flags=re.UNICODE)
-STRIP2_RE = re.compile(r'\([^\)]*\)|\[[^\]]*\]',
+                     r' *[\]\)\}]', flags=re.UNICODE)
+STRIP2_RE = re.compile(r'\([^\)]*\)|\[[^\]]*\]|\{[^\}]*\}',
                        #|:.*| *[-,;] *$|^ *[-,;] *
-                       flags=re.I|re.UNICODE)
+                       flags=re.UNICODE)
 TITLE_RE = re.compile(r'\"(.+?)\"|^(.+)$', flags=re.UNICODE)
 #STRIP3_RE = re.compile(r'^The *', flags=re.I|re.UNICODE)
 FOOTER_SUBST_RE = re.compile(r'\{(\w+)\}', flags=re.UNICODE)
@@ -78,6 +79,8 @@ def parse_title(desc):
     # What did we get?
     return [title, year]
 
+DEFAULT_ERRORDELAY = 60
+
 class MovieGuide(object):
     """Class encapsulating variables for the bot."""
 
@@ -108,12 +111,17 @@ class MovieGuide(object):
             self.mode = config.get('reddit', 'mode')
         except ConfigParser.NoOptionError:
             self.mode = 'new'
+        try:
+            self.fetchlimit = int(config.get('reddit', 'limit'))
+        except ConfigParser.NoOptionError:
+            self.fetchlimit = 100
 
         # Heartbeat file
         try:
             self.heartbeatfile = config.get('settings', 'heartbeat')
         except ConfigParser.NoOptionError:
             self.heartbeatfile = None
+        self.errordelay = DEFAULT_ERRORDELAY
 
         # Load footer
         self.footer = ''
@@ -146,6 +154,7 @@ class MovieGuide(object):
             heartbeatfh = open(self.heartbeatfile, 'w')
             heartbeatfh.write('OK %s' % (time.time(),))
             heartbeatfh.close()
+        self.errordelay = DEFAULT_ERRORDELAY
 
     def fetch_new_posts(self, subreddit=None, mode=None):
         """Process new submissions to the subreddit."""
@@ -169,7 +178,7 @@ class MovieGuide(object):
         sr_get = getattr(sr, 'get_' + '_from_'.join(mode.split('-')))
         print "Checking for %s posts in %s..." % (mode, str(sr))
 
-        posts = sr_get(limit=100)
+        posts = sr_get(limit=self.fetchlimit)
         count = 0
         for post in posts:
             # FIXME: Track the most recent post that we've handled, continue
@@ -183,7 +192,7 @@ class MovieGuide(object):
                     " VALUES (?, ?, ?)", [post.id, title, STATUS_WAITING])
                 count += 1
         self.db.commit()
-        print "Found %d new posts." % count
+        print "Discovered %d new posts." % count
 
     def handle_posts(self):
         """
@@ -327,7 +336,8 @@ class MovieGuide(object):
             except Exception, eobj:
                 estr = "NOTOK %s\nException: %s\n%s\n" % \
                        (time.time(), eobj, traceback.format_exc())
-                estr += "\nRestarting in one hour\n%s\n" % (time.asctime(),)
+                estr += "\nRestarting in %d seconds\n%s\n" % \
+                    (delay, time.asctime())
                 if self.heartbeatfile:
                     try:
                         outfh = open(self.heartbeatfile, 'w')
@@ -337,7 +347,8 @@ class MovieGuide(object):
                         estr += "\nAlso, %s while writing to %s.\n" % \
                                 (eobj, self.heartbeatfile)
                 print estr
-                time.sleep(60*60) # 1 hour
+                time.sleep(self.errordelay)
+                self.errordelay *= 2
             else:
                 break
 
