@@ -181,7 +181,7 @@ class MovieGuide(object):
         posts = sr_get(limit=self.fetchlimit)
         count = 0
         for post in posts:
-            # FIXME: Track the most recent post that we've handled, continue
+            # FIXME: Track the most recent post that we've processed, continue
             #        until we hit our last timestamp.
             # if lastsuccess < post.created_utc:
             #     lastsuccess = post.created_utc
@@ -194,7 +194,7 @@ class MovieGuide(object):
         self.db.commit()
         print "Discovered %d new posts." % count
 
-    def handle_posts(self):
+    def process_posts(self):
         """
             Given a post object from praw:
             1. Check the database to see if the post has been already seen.
@@ -208,12 +208,14 @@ class MovieGuide(object):
                               "WHERE status=? ORDER BY postid DESC",
                               [STATUS_WAITING]).fetchall()
 
+        print "Processing %d posts." % len(pending)
+
         # Don't spend more than two intervals processing posts
         end_time = time.time() + 2*INTERVAL*60
 
         for row in pending:
             postid, posttitle = row
-            # Check if item has already been handled
+            # Check if item has already been processed
             print "Found http://redd.it/%s %s" % (postid, posttitle)
 
             # Parse item titles
@@ -309,9 +311,9 @@ class MovieGuide(object):
         self.fetch_new_posts()
 
         # Add reviews to new posts
-        done = self.handle_posts()
+        done = self.process_posts()
 
-        # Return True if handle_posts has completed
+        # Return True if process_posts has completed
         return done
 
     def main(self):
