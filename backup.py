@@ -48,7 +48,7 @@ def run_backup(database_file, post_url, post_data,
     shutil.copy(database_file, temp_file)
 
     # Load new data
-    data = dump(temp_file)
+    data = tuple(dump(temp_file))
 
     if not full_backup and os.path.exists(incr_file):
         # Load old data and perform incremental backup

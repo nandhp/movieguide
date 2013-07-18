@@ -339,7 +339,7 @@ class MovieGuide(object):
                 estr = "NOTOK %s\nException: %s\n%s\n" % \
                        (time.time(), eobj, traceback.format_exc())
                 estr += "\nRestarting in %d seconds\n%s\n" % \
-                    (delay, time.asctime())
+                    (self.errordelay, time.asctime())
                 if self.heartbeatfile:
                     try:
                         outfh = open(self.heartbeatfile, 'w')
