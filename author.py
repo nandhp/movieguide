@@ -93,6 +93,28 @@ def invent_plot(movie):
             temp += ' Who is not M. Night Shyamalan.'
         generic_plot.append(temp)
         bad_plot.append(temp + " Maybe that's a bad sign?")
+    genre_plots = (
+        (('Action', 'Adventure'), 'Action! Adventure! Really wild things! ' +
+         'I just wish I knew what those things were....'),
+        (('Mystery',), "The plot shall remain a mystery."),
+        (('Romance',), 'Boy meets girl; boy loses girl; boy finds girl again.'
+         + " It's a romance; they're all like that."),
+        (('Documentary',), "It's a documentary. Maybe it's about movies " +
+         'without plot summaries, or something like that.'),
+        (('Biography',), "It's a biography. Maybe it's about someone who " +
+         "writes plot summaries. Or, more appropriately, someone who doesn't."),
+        (('Short',), "A short film. Maybe it's so short it has no plot."),
+        (('Short',), "What is this? A film for ants?"),
+        #(('Thriller',), "'Cause this is thriller, thriller night."),
+        (('Experimental',), "'Experimental'? What does that even mean?"),
+        (('Lifestyle',), "'Lifestyle'? Is that a real genre? " +
+         "What does that even mean?"),
+        )
+    for genres, text in genre_plots:
+        for genre in genres:
+            if genre in movie['genres']:
+                generic_plot.append(text)
+                break
     generic_plot += [
         "In a world where there is no plot summary...",
         "This space intentionally left blank."
@@ -100,8 +122,6 @@ def invent_plot(movie):
     rating = float(movie["rating"][2])
     if movie['certificates'] and 'X' in movie['certificates'][0]:
         return "Plot? It's X-rated, it doesn't need a plot."
-    if 'Documentary' in movie['genres'] and random.random() < 0.8:
-        return "It's a documentary. I'm guessing the plot is thin."
     if rating > 0.1 and rating < 3:
         return random.choice(bad_plot)
     if rating > 8:
