@@ -216,11 +216,12 @@ class MovieGuide(object):
         for row in pending:
             postid, posttitle = row
             # Check if item has already been processed
-            print "Found http://redd.it/%s %s" % (postid, posttitle)
+            print "Found http://redd.it/%s %s" % \
+                (postid, posttitle.encode('utf-8'))
 
             # Parse item titles
             title, year = parse_title(posttitle)
-            print "Parsed title: %s (%s)" % (title, str(year))
+            print "Parsed title: %s (%s)" % (title.encode('utf-8'), str(year))
 
             # Generate a review
             try:
@@ -248,7 +249,7 @@ class MovieGuide(object):
                         return '(Error)'
                 comment_text += "\n\n" + \
                                 FOOTER_SUBST_RE.sub(footersubfunc, self.footer)
-                print comment_text
+                print comment_text.encode('utf-8')
                 # Post review as a comment
                 post = praw.objects.Submission.from_id(self.reddit, postid)
                 try:
