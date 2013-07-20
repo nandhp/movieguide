@@ -88,6 +88,7 @@ def run_backup(database_file, post_url, post_data,
     return True
 
 def restore_backup(filename, outdir):
+    """Restore a database backup from a CSV file."""
     infh = open(filename, 'r')
     fnstr = '%05d%s.txt'
     lastfull = 0
