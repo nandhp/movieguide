@@ -86,10 +86,14 @@ def run_backup(database_file, put_dir, auth=(), full_backup=False, min_size=0):
     # Encode message
     checksum, message = gzip(data)
 
+    # Generate output filename
     now = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     typecode = 'F' if full_backup else 'I'
     filename = "%s-%s-%s.gz" % (now, typecode, checksum)
+    if put_dir[-1] != '/':
+        put_dir += '/'  # Always treat the URL as being to a directory
     filename = urlparse.urljoin(put_dir, filename)
+    #print filename
 
     # Send message
     if True:
