@@ -39,11 +39,12 @@ heartbeat=/tmp/movieguide-heartbeat
 # (Optional) settings for database backups. Comment out these options
 # if you don't want to send backups.
 
-# URL for POSTing database backups.
-url=http://www.myserver.example/backup
+# URL to remote directory to store database backups. Will generate
+# filename and PUT the backup into this directory. For example, if
+# http://example/backup is specified, a backup might be sent in a PUT
+# request to http://example/backup/20130724T050427Z-F-da39a3ee.gz.
+url=http://www.myserver.example/dav/backup
 
-# POST-data template for database backups.
-#
-# Use interpolation %%(data)s, %%(type)s, and %%(checksum)s. Note that
-# we are escaping % as %% to avoid ConfigParser's own interpolation.
-template=d=%%(data)s&t=%%(type)s&sha1=%%(checksum)s
+# Username and password for backup directory.
+username=MovieGuide
+password=secret

@@ -5,8 +5,7 @@
 from subprocess import Popen, PIPE
 from cStringIO import StringIO
 from gzip import GzipFile
-from base64 import urlsafe_b64encode, urlsafe_b64decode
-import os.path, shutil, difflib, urllib2, hashlib
+import os.path, shutil, difflib, time, urllib2, urlparse, hashlib
 
 def dump(filename):
     """Dump an sqlite3 database."""
@@ -18,14 +17,16 @@ def dump(filename):
 
 def gzip(data):
     """Compress a string with gzip"""
+    hasher = hashlib.sha1()
     compressed_data = StringIO()
     gzfh = GzipFile(mode='w', fileobj=compressed_data)
     for i in data:
         gzfh.write(i + '\n')
+        hasher.update(i + '\n')
     gzfh.close()
     buf = compressed_data.getvalue()
     compressed_data.close()
-    return buf
+    return hasher.hexdigest(), buf
 
 def gunzip(data):
     """Uncompress a string with gzip"""
@@ -34,10 +35,24 @@ def gunzip(data):
     buf = gzfh.read()
     gzfh.close()
     compressed_data.close()
-    return buf
+    return hashlib.sha1(buf).hexdigest(), buf
 
-def run_backup(database_file, post_url, post_data,
-               full_backup=False, min_size=0):
+def http_put(url, data, auth=(), mimetype='application/octet-stream'):
+    class PutRequest(urllib2.Request):
+        def get_method(self):
+            return 'PUT'
+
+    password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+    if auth:
+        password_mgr.add_password(None, url, auth[0], auth[1])
+    opener = urllib2.build_opener(urllib2.HTTPBasicAuthHandler(password_mgr),
+                                  urllib2.HTTPHandler)
+    request = PutRequest(url, data, headers={'Content-Type': mimetype})
+    obj = opener.open(request, timeout=2*60)
+    code = obj.getcode()
+    assert(code >= 200 and code < 300)
+
+def run_backup(database_file, put_dir, auth=(), full_backup=False, min_size=0):
     """Back up the database."""
 
     # Filenames
@@ -64,21 +79,22 @@ def run_backup(database_file, post_url, post_data,
         print "  No changes."
         return True
 
-    if min_size and len(data) < min_size: # Measured in lines
+    if min_size and len(data) < min_size: # Measured in lines, not bytes
         print "  Not enough changes. (%d < %d lines)" % (len(data), min_size)
         return False
 
     # Encode message
-    message = urlsafe_b64encode(gzip(data))
-    postdata = post_data % {'type': 'F' if full_backup else 'I',
-                            'data': message,
-                            'checksum': hashlib.sha1(message).hexdigest()}
+    checksum, message = gzip(data)
+
+    now = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    typecode = 'F' if full_backup else 'I'
+    filename = "%s-%s-%s.gz" % (now, typecode, checksum)
+    filename = urlparse.urljoin(put_dir, filename)
 
     # Send message
     if True:
         print "  Sending %d bytes..." % len(message)
-        obj = urllib2.urlopen(post_url, postdata, timeout=2*60)
-        assert(obj.getcode() == 200)
+        http_put(filename, message, auth)
         print "  Backup complete."
     else:
         print message.as_string()
@@ -88,7 +104,7 @@ def run_backup(database_file, post_url, post_data,
     return True
 
 def restore_backup(filename, outdir):
-    """Restore a database backup from a CSV file."""
+    """Restore a database backup from a CSV file. (Currently obsolete.)"""
     infh = open(filename, 'r')
     fnstr = '%05d%s.txt'
     lastfull = 0
@@ -104,6 +120,7 @@ def restore_backup(filename, outdir):
         assert(hashlib.sha1(data).hexdigest() == checksum)
         outfn = os.path.join(outdir, fnstr % (lineno, datatype))
         outfh = open(outfn, 'wb')
+        assert(False) # gunzip changed to return checksum
         outfh.write(gunzip(urlsafe_b64decode(data)))
         outfh.close()
         if datatype == 'F':
@@ -122,9 +139,9 @@ def restore_backup(filename, outdir):
 if __name__ == '__main__':
     import sys
     if sys.argv[1] == 'backup':
-        POST_URL = 'http://www.myserver.example/backup'
-        POST_DATA = 'd=%(data)s&t=%(type)s&sha1=%(checksum)s'
-        run_backup('movieguide.db', POST_URL, POST_DATA)
+        run_backup('movieguide.db',
+                   'http://www.myserver.example/dav/backup',
+                   ('MovieGuide', 'secret'))
     elif sys.argv[1] == 'restore':
         restore_backup(sys.argv[2], 'restored-backup')
     else:

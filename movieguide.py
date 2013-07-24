@@ -99,9 +99,13 @@ class MovieGuide(object):
         # Backup configuration
         try:
             self.backup_url = config.get('backup', 'url')
-            self.backup_template = config.get('backup', 'template')
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-            self.backup_url = self.backup_template = None
+            self.backup_url = None
+        try:
+            self.backup_auth = (config.get('backup', 'username'),
+                                config.get('backup', 'password'))
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            self.backup_auth = ()
         self.last_full = date.today()
         self.last_incr = datetime.min
 
@@ -286,7 +290,7 @@ class MovieGuide(object):
 
     def do_backup(self):
         """Upload a database backup."""
-        if self.backup_url and self.backup_template:
+        if self.backup_url:
             now = datetime.now()
             now_date = now.date()
             # Do a full backup right after midnight
@@ -295,7 +299,7 @@ class MovieGuide(object):
             # but don't send a backup of less than 12 lines.
             min_size = 12 if now-self.last_incr < timedelta(minutes=30) else 0
             if backup.run_backup(self.dbfile,
-                                 self.backup_url, self.backup_template,
+                                 self.backup_url, self.backup_auth,
                                  full_backup=full, min_size=min_size):
                 # The backup was not skipped (occured or no changes)
                 self.last_incr = now
