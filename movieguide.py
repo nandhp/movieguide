@@ -53,7 +53,7 @@ def parse_title(desc):
     desc = STRIP1_RE.sub('', desc).strip()
 
     # Try to find the year first, so we can discard everything after it.
-    match = re.search(YEAR_RE, desc)
+    match = YEAR_RE.search(desc)
     if match:
         year = int(match.group(2))
         desc = match.group(1)
