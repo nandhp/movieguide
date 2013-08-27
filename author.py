@@ -144,8 +144,8 @@ def write_review(movie):
         certificate_transform = CERTIFICATE_FUNCS[movie['certificates'][1]]
         temp_list.append(certificate_transform(movie['certificates'][0]))
     # Compute color info
-    if movie['color_info']:
-        temp_list.append(movie['color_info'])
+    # if movie['color_info']:
+    #    temp_list.append(movie['color_info'])
 
     # Compute running time
     if movie['running_time']:
