@@ -17,8 +17,9 @@ def grouped_num(num, char=',', size=3):
         out.append(my_str[0:i])
     return char.join(reversed(out))
 
-# From snudown, &().- removed
-MARKDOWN_SPECIAL_RE = re.compile(r'[\\`*_{}\[\]#+!:|<>/^~]', flags=re.UNICODE)
+# From snudown, &()- removed; only escape . after a digit.
+MARKDOWN_SPECIAL_RE = re.compile(r'[\\`*_{}\[\]#+!:|<>/^~]|(?<=\d)\.',
+                                 flags=re.UNICODE)
 def escape_markdown(data):
     """Escape characters with special meaning in Markdown."""
     def _replacement(match):
