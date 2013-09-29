@@ -29,8 +29,8 @@ STATUS_EXACT = 5
 # Regular expressions for mangling post titles
 SPACE_RE = re.compile(r'\s+', flags=re.UNICODE)
 STRIP1_RE = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|'+
-                       r'(?:1080|720|480)[pi]|' +
-                       r'YouTube|Netflix|\d+x\d+|Part *[0-9/]+|' +
+                       r'(?:1080|720|480|360|240)[pi]|' +
+                       r'YouTube|Netflix|\d+x\d+|' +
                        r'^ *[\[\{]* *IJW *[\]\}:]*)',
                        #|[a-z]* *sub(title)?s?)',
                        flags=re.I|re.UNICODE)
@@ -356,7 +356,8 @@ class MovieGuide(object):
                                 (eobj, self.heartbeatfile)
                 print estr
                 time.sleep(self.errordelay)
-                self.errordelay *= 2
+                if self.errordelay < 3600:
+                    self.errordelay *= 2
             else:
                 break
 
