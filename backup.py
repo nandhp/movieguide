@@ -154,9 +154,11 @@ def fetch_backup(localdir, remote, auth=(), keep_only=None):
         remote += '/'  # Always treat the URL as being to a directory
 
     # Do PROPFIND on the remote directory and parse the XML
-    filenames = parse_propfind(http_request('PROPFIND', remote, None, auth))
+    filenames = list(parse_propfind(http_request('PROPFIND', remote,
+                                                 None, auth)))
 
     # Enumerate the items in the directory and download missing items
+    fullbackups = []
     for filename, path, size in filenames:
         if size < 0:
             # Skip subdirectories (collections)
@@ -170,6 +172,10 @@ def fetch_backup(localdir, remote, auth=(), keep_only=None):
         fndata = parse_filename(filename)
         print filename
 
+        # Track full backups for use in expiration
+        assert(fndata[1] in 'FI')
+        if fndata[1] == 'F' and keep_only:
+            fullbackups.append(filename)
         # Check if the file is already downloaded
         if os.path.exists(filepath):
             if os.path.getsize(filepath) == size:
@@ -189,8 +195,20 @@ def fetch_backup(localdir, remote, auth=(), keep_only=None):
         print "  (OK)"
 
     # Delete expired files
-    if keep_only is not None:
-        raise NotImplementedError
+    if keep_only and len(fullbackups) > keep_only:
+        fullbackups.sort()
+        threshold = fullbackups[-keep_only]
+        for filename, path, size in filenames:
+            if size < 0 or filename >= threshold:
+                continue
+            # Determine local filename and remote URL
+            filepath = os.path.join(localdir, filename)
+            fileurl = urlparse.urljoin(remote, path)
+            # Delete the URL and the file
+            print "Deleting %s" % filename
+            http_request('DELETE', fileurl, None, auth)
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
 def restore_backup(localdir, outname):
     """Restore a database backup from a local backup directory."""
@@ -279,7 +297,7 @@ def _main(argv):
     if args.mode == 'backup':
         run_backup(args.dbfile, args.remote, args.auth, full_backup=args.full)
     elif args.mode == 'fetch':
-        assert(args.keep_only is None or args.keep_only >= 0)
+        assert(args.keep_only is None or args.keep_only > 0)
         fetch_backup(args.localdir, args.remote,
                      args.auth, keep_only=args.keep_only)
     elif args.mode == 'restore':
