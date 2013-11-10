@@ -3,6 +3,7 @@ Review-writing module for MovieGuide
 """
 
 import re, urllib, random
+from datetime import date
 
 def grouped_num(num, char=',', size=3):
     """Impose digit grouping on integer num"""
@@ -55,9 +56,17 @@ CERTIFICATE_FUNCS = {
     'USA': certificate_usa,
 }
 
+YEAR_RE = re.compile(r'.*\(([0-9]+)[/\)]', flags=re.UNICODE)
+
 # Invent plots
 def invent_plot(movie):
     """Invent a plot summary if IMDb doesn't provide one."""
+    def recent_movie(movie):
+        match = YEAR_RE.match(movie['title'])
+        return (match and int(match.group(1)) >= date.today().year)
+    if recent_movie(movie):
+        return "Sorry, I don't have a plot summary for this movie. " + \
+            "Maybe it's too new."
     generic_plot = [
         "I have no idea what happens in this movie.",
         "I haven't seen this movie; I don't know anything else about it.",
