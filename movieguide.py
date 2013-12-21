@@ -12,7 +12,6 @@ import codecs
 import time
 from datetime import datetime, date, timedelta
 
-import jsonapi
 import author, backup
 
 USER_AGENT = 'MovieGuide/0.2 (by /u/nandhp)'
@@ -150,7 +149,7 @@ class MovieGuide(object):
                           password=r_conf['password'])
 
         # IMDb API
-        self.imdb = jsonapi.IMDbAPI(s_conf['imdburl'])
+        self.author = author.Author(imdburl=s_conf['imdburl'])
 
     def heartbeat(self):
         """Update heartbeat file (if configured) with current timestamp."""
@@ -229,16 +228,9 @@ class MovieGuide(object):
                 .encode('utf-8')
 
             # Generate a review
-            try:
-                # Look up the record for this movie.
-                movie = self.imdb.search(title, year=year)
-                comment_text = author.write_review(movie)
-                comment_status = STATUS_EXACT
-            except jsonapi.IMDbError:
-                # Wow; this movie doesn't exist at all.
-                movie = None
-                comment_text = None
-                comment_status = STATUS_NOMATCH
+            movie, comment_text = self.author.process_item(title, year)
+            comment_status = STATUS_NOMATCH if comment_text is None \
+                else STATUS_EXACT
             comment_id = None
 
             # FIXME: Trap SIGTERM for rest of iteration
@@ -252,8 +244,7 @@ class MovieGuide(object):
                         return '%.2f' % (movie['_score'],)
                     else:
                         return '(Error)'
-                comment_text += "\n\n" + \
-                                FOOTER_SUBST_RE.sub(footersubfunc, self.footer)
+                comment_text += FOOTER_SUBST_RE.sub(footersubfunc, self.footer)
                 print comment_text.encode('utf-8')
                 # Post review as a comment
                 post = praw.objects.Submission.from_id(self.reddit, postid)

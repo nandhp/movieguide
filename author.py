@@ -4,6 +4,7 @@ Review-writing module for MovieGuide
 
 import re, urllib, random
 from datetime import date
+import jsonapi, freebaseapi, wikipedia
 
 def grouped_num(num, char=',', size=3):
     """Impose digit grouping on integer num"""
@@ -62,6 +63,8 @@ YEAR_RE = re.compile(r'.*\(([0-9]+)[/\)]', flags=re.UNICODE)
 def invent_plot(movie):
     """Invent a plot summary if IMDb doesn't provide one."""
     def recent_movie(movie):
+        """Movie is from this year (or later)"""
+        # FIXME: January/February treat as previous year
         match = YEAR_RE.match(movie['title'])
         return (match and int(match.group(1)) >= date.today().year)
     if recent_movie(movie):
@@ -145,8 +148,8 @@ def munge_name(name):
         return '[%s](/r/OneTrueGod)' % name
     return name
 
-def write_review(movie):
-    """We found the movie. Write a review."""
+def write_vitals(movie):
+    """Assemble summary information (title, genres, cast, ...) for a movie."""
 
     temp_list = []
     # Compute certificate (film classification)
@@ -169,8 +172,9 @@ def write_review(movie):
     extra_info = ', '.join(temp_list)
     if extra_info:
         extra_info = '['+extra_info+']'
+    url = imdb_url(movie)
     review = '**[%s](%s)** %s    \n' % (escape_markdown(movie['title']),
-        imdb_url(movie), extra_info)
+        url, extra_info)
     # OPTIONAL LINE: actual title, if not original title, that was best match 
     if 'aka' in movie and movie['aka']:
         review += '&nbsp;&nbsp;&nbsp; a.k.a. **%s**    \n' % \
@@ -195,11 +199,11 @@ def write_review(movie):
         if movie['directors']:
             review += '; '
         plural = 'Writer' if len(movie['writers']) == 1 else 'Writers'
-        review += "%s: %s\n\n" % (plural, names_strs[2])
-    elif movie['directors']:
-        review += "\n\n"
-    elif movie['cast']:
-        review += "\n"
+        review += "%s: %s" % (plural, names_strs[2])
+    return { 'vitals': review, 'IMDb_url': url }
+
+def write_plot(movie):
+    """Assemble IMDb rating and plot summary for a movie."""
 
     # Compute star rating
     rating_int = int(round(float(movie["rating"][2])))
@@ -218,18 +222,145 @@ def write_review(movie):
         # Can't find a plot; let's just make something up.
         plot_str = "> *%s*" % invent_plot(movie)
 
-    review += "----\n\n**IMDb user rating:** %s\n%s\n\n----\n\n" % \
-        (rating_str, plot_str)
+    return { 'plot': "**IMDb user rating:** %s\n%s" % (rating_str, plot_str) }
 
+# Award canonicalization
+CANONICAL_AWARD = {
+    'Razzie Award': 'Golden Raspberry Award',
+}
+MAJOR_AWARDS = ('Academy Award', 'Golden Globe Award',
+                'BAFTA Award', 'Golden Raspberry Award',
+                # FIXME: There's probably a few other awards that
+                # deserve special attention.
+                )
+
+def write_awards(fbdata):
+    """Assemble award summary returned from Freebase."""
+
+    def summarize_counts(counts):
+        """Display [3,2] as '3 wins, 2 nominations' (skipping wins if none)"""
+        return ("%(1)d wins and %(0)d nominations" if counts[1] else
+                "%(0)d nominations") % \
+                {'0': counts[0], '1': counts[1]}
+    review = ""
+    # Summarize awards/award nominations
+    awards = {}
+    awardval = 0
+    counts = [0, 0]
+    for award in fbdata['/award/award_nominated_work/award_nominations'] + \
+            [None,] + fbdata['/award/award_winning_work/awards_won']:
+        if not award:
+            awardval = 1
+            continue
+        awardname = award['award'] if award['award'] else 'Untitled Award'
+        awardcat = ''
+        if ' for ' in awardname:
+            awardname, awardcat = awardname.split(' for ', 1)
+        if awardname in CANONICAL_AWARD:
+            awardname = CANONICAL_AWARD[awardname]
+        if awardname in MAJOR_AWARDS:
+            awardname = '%s %s' % (award['year'], awardname)
+            if awardname not in awards:
+                awards[awardname] = {}
+            awards[awardname][awardcat] = awardval
+        else:
+            counts[awardval] += 1
+    # Display awards info
+    if awards:
+        review += "**Awards:**\n\n"
+        for award in sorted(awards.keys()):
+            review += "* **%s** " % (award,)
+            if '' not in awards[award] or len(awards[award]) > 1:
+                review += 'for '
+            cats = [k if awards[award][k] else k + ' *(nominated)*' \
+                        for k in sorted(awards[award].keys())]
+            review += ', '.join(cats)
+            review += "\n"
+        if counts[0]:
+            review += "* Another %s\n" % summarize_counts(counts)
+    elif counts[0]:
+        review += "**Awards:** %s\n" % summarize_counts(counts)
+    return { 'awards': review.strip() }
+
+def write_wikipedia(fbdata, wpobj):
+    """Assemble critical reception excerpt from Wikipedia article."""
+    enwiki = fbdata['wiki_en:key']
+    if not enwiki or 'value' not in enwiki or not enwiki['value']:
+        return None
+    wikidata = wpobj.by_curid(enwiki['value'])
+    review = {}
+    if 'critical' in wikidata and wikidata['critical']:
+        review['critical'] = "**Critical reception:**\n\n" + \
+            "> %s (*Wikipedia*)" % (escape_markdown(wikidata['critical']),)
+    if 'url' in wikidata:
+        review['Wikipedia_url'] = wikidata['url']
     return review
+
+def write_freebase_xrefs(fbdata):
+    """Assemble cross-references from Freebase data."""
+    urls = {}
+    for key, name, template in (("id", "Freebase",
+                                 "http://www.freebase.com%s"),
+                                ("/film/film/netflix_id", "Netflix",
+                                 "http://movies.netflix.com/WiMovie/%s")):
+        if key in fbdata and fbdata[key] and len(fbdata[key]):
+            urls[name + "_url"] = template % (escape_markdown(fbdata[key][0]),)
+    return urls
+
+REVIEW_SECTIONS = ('vitals', 'plot', 'critical+awards', 'links')
+CROSSREF_URLS = ('IMDb', 'Netflix', 'Freebase', 'Wikipedia')
+
+class Author(object):
+    """Class for holding state variables relating to writing reviews."""
+
+    def __init__(self, imdburl='http://localhost:8051/imdb'):
+        self.imdb = jsonapi.IMDbAPI(imdburl)
+        self.freebaseapi = freebaseapi.FreebaseAPI()
+        self.wikipedia = wikipedia.Wikipedia()
+
+    def process_item(self, title, year):
+        """Look up an item by title and year and write a review."""
+        review = {}
+        try:
+            # Look up the record for this movie using the IMDb API.
+            movie = self.imdb.search(title, year=year)
+            review.update(write_vitals(movie))
+            review.update(write_plot(movie))
+        except jsonapi.IMDbError:
+            # Wow; this movie doesn't exist at all.
+            return (None, None)
+        # Check IMDb ID for cross-referencing
+        if 'imdbid' in movie:
+            # We have an IMDb ID, cross-reference to Freebase
+            fbdata = self.freebaseapi.by_imdbid(movie['imdbid'])
+            if fbdata:
+                review.update(write_awards(fbdata))
+                review.update(write_wikipedia(fbdata, self.wikipedia))
+                review.update(write_freebase_xrefs(fbdata))
+        # A list of links to sources, etc.
+        review['links'] = 'More info at ' + \
+            ', '.join("[%s](%s)" % (i, review[i+'_url']) for i in CROSSREF_URLS
+                      if i+'_url' in review and review[i+'_url']) + '.'
+        if review:
+            buf = []
+            for i in REVIEW_SECTIONS:
+                sect = []
+                for j in i.split('+'):
+                    if j in review and review[j]:
+                        sect.append(review[j].strip())
+                sect = '\n\n'.join(i for i in sect if i).strip()
+                if sect:
+                    buf.append(sect)
+            return (movie, "\n\n---\n\n".join(buf) + '  \n')
+        return (movie, None)
 
 def _main(title):
     """Utility function for command-line testing."""
-    movie = jsonapi.IMDbAPI('http://localhost:8051/imdb').search(title)
-    print invent_plot(movie)
+    movie, comment = Author().process_item(title, None)
+    print '[', invent_plot(movie), ']'
     print
-    print write_review(movie)
+    print comment
 
 if __name__ == '__main__':
-    import sys, jsonapi
+    import sys
     _main(sys.argv[1])
