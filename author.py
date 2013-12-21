@@ -269,12 +269,13 @@ def write_awards(fbdata):
     if awards:
         review += "**Awards:**\n\n"
         for award in sorted(awards.keys()):
-            review += "* **%s** " % (award,)
+            review += "* **%s** " % (escape_markdown(award),)
             if '' not in awards[award] or len(awards[award]) > 1:
                 review += 'for '
-            cats = [k if awards[award][k] else k + ' *(nominated)*' \
+            cats = [('%s' if awards[award][k] else '*%s (nominated)*') % \
+                        (escape_markdown(k),) \
                         for k in sorted(awards[award].keys())]
-            review += ', '.join(cats)
+            review += '; '.join(cats)
             review += "\n"
         if counts[0]:
             review += "* Another %s\n" % summarize_counts(counts)
@@ -286,7 +287,7 @@ def write_wikipedia(fbdata, wpobj):
     """Assemble critical reception excerpt from Wikipedia article."""
     enwiki = fbdata['wiki_en:key']
     if not enwiki or 'value' not in enwiki or not enwiki['value']:
-        return None
+        return {}
     wikidata = wpobj.by_curid(enwiki['value'])
     review = {}
     if 'critical' in wikidata and wikidata['critical']:
@@ -308,7 +309,7 @@ def write_freebase_xrefs(fbdata):
     return urls
 
 REVIEW_SECTIONS = ('vitals', 'plot', 'critical+awards', 'links')
-CROSSREF_URLS = ('IMDb', 'Netflix', 'Freebase', 'Wikipedia')
+CROSSREF_URLS = ('IMDb', 'Freebase', 'Wikipedia', 'Netflix')
 
 class Author(object):
     """Class for holding state variables relating to writing reviews."""
