@@ -86,14 +86,14 @@ class Wikipedia(object):
         parser = WikipediaTextifier()
         parser.feed(buf)
         result = {
-            'critical': None, 'criticalsection': None
+            'critical': None, 'criticalsection': None,
+            'url': 'https' + url[url.find(':'):url.rfind('&')] \
+                if url else None
             }
         # Critical response
         for my_re in CRITICAL_RES:
             match = my_re.search(parser.buffer)
             if match:
-                result['url'] = 'https' + url[url.find(':'):url.rfind('&')] \
-                    if url else None
                 result['critical'] =  match.group(2)
                 result['criticalsection'] = match.group(1)
                 break
