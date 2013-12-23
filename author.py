@@ -273,7 +273,7 @@ def write_awards(fbdata):
             if '' not in awards[award] or len(awards[award]) > 1:
                 review += 'for '
             cats = [('%s' if awards[award][k] else '*%s (nominated)*') % \
-                        (escape_markdown(k),) \
+                        (escape_markdown(k.strip()),) \
                         for k in sorted(awards[award].keys())]
             review += '; '.join(cats)
             review += "\n"
