@@ -69,6 +69,7 @@ def parse_title(desc):
         for group in match.group(1, 2):
             if group:
                 title = group.strip()
+                break
     else:
         title = desc
     ## FIXME: Split on popular punctuation [-,;.:] to handle extra words
