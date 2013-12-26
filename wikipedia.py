@@ -11,9 +11,12 @@ import re
 USER_AGENT = 'MovieGuide-wikipedia/0.1'
 
 SKIPTAGS = ('table', 'sup')
-NESTTAGS = ('div')
+NESTTAGS = ('div', 'span')
 HEADTAGS = tuple('h'+str(i) for i in range(6))
 SKIPSECTS = ("contents", "references", "see also", "external links", "notes")
+
+SPACING_RE = re.compile(r'\s+', flags=re.UNICODE)
+
 class WikipediaTextifier(HTMLParser):
     """
     Generate a plain text version of a Wikipedia article from a page like
@@ -37,9 +40,12 @@ class WikipediaTextifier(HTMLParser):
         tag = tag.lower()
         if (self.skip and tag in NESTTAGS) or tag in SKIPTAGS:
             self.skip += 1
-        elif tag == 'div':
+        elif tag in NESTTAGS:
             adict = dict(attrs)
-            if 'class' in adict and 'thumbcaption' in adict['class']:
+            aclass = adict.get('class', '')
+            astyle = adict.get('style', '')
+            if 'thumbcaption' in aclass or 'quotebox' in aclass or \
+                    'display:none' in astyle or 'display: none' in astyle:
                 self.skip += 1
         elif tag in ('p', 'br'):
             self._append("\n")
@@ -64,18 +70,36 @@ class WikipediaTextifier(HTMLParser):
                 self.inheading = 0
 
     def handle_data(self, data):
+        data = SPACING_RE.sub(' ', data)
         if self.inheading:
             self.headingbuf += data
         else:
             self._append(data)
 
-CRITICAL_RES = (re.compile(r'#+ (Critical.*)\s*\n\s*([^#\s].+)',
+    def handle_entityref(self, name):
+        self.handle_data(self.unescape('&%s;' % (name,)))
+
+    def handle_charref(self, name):
+        self.handle_data(self.unescape('&#%s;' % (name,)))
+
+# Regular expressions for the critical reception section
+CRITICAL_RES = (re.compile(r'#+ (Critical.*)\s*\n((?:\s*[^#\s].+)+)',
                            flags=re.UNICODE|re.I),
-                re.compile(r'#+ (Reception.*)\s*\n\s*([^#\s].+)',
+                re.compile(r'#+ (Reception.*)\s*\n((?:\s*[^#\s].+)+)',
                            flags=re.UNICODE|re.I),
-                re.compile(r'#+ (Reviews)\s*\n\s*([^#\s].+)',
+                re.compile(r'#+ (Reviews|Critics)\s*\n((?:\s*[^#\s].+)+)',
                            flags=re.UNICODE|re.I),
                 )
+PARA_RE = re.compile(r'\s*\n\s*', flags=re.UNICODE)
+CRITICAL_KEYWORDS = (
+    # Newspapers and magazines
+    'Times', 'Herald', 'Chronicle', 'Post', 'Tribune', 'Globe', 'Mail',
+    'Star', 'Rolling', 'Stone', 'Edition', 'Today', 'Daily', 'Weekly',
+    'Guide', 'Journal', 'Guardian',
+    # Critics and aggregators
+    'Ebert', 'Rotten', 'Metacritic', 'CinemaScore',
+    )
+
 WIKI_URL = "http://%s.wikipedia.org/w/index.php?curid=%s&action=render"
 class Wikipedia(object):
     """Interface to Wikipedia"""
@@ -94,8 +118,20 @@ class Wikipedia(object):
         for my_re in CRITICAL_RES:
             match = my_re.search(parser.buffer)
             if match:
-                result['critical'] =  match.group(2)
                 result['criticalsection'] = match.group(1)
+                paras = PARA_RE.split(match.group(2))
+                # Return the first paragraph containing a critical keyword
+                for para in paras:
+                    for keyword in CRITICAL_KEYWORDS:
+                        if keyword in para:
+                            result['critical'] = para.strip()
+                            break
+                    else:
+                        continue
+                    break
+                else:
+                    # If no such paragraph, return the first paragraph
+                    result['critical'] = paras[0].strip()
                 break
         return result
 
@@ -127,6 +163,9 @@ class Wikipedia(object):
 
 if __name__ == '__main__':
     import sys
-    print repr(Wikipedia.parse(sys.stdin.read()
-                               .decode('utf-8', errors='replace')))
-    #print repr(Wikipedia().by_curid(23941708))
+    if len(sys.argv) > 1:
+        for x in sys.argv[1:]:
+            print repr(Wikipedia().by_curid(x))
+    else:
+        print repr(Wikipedia.parse(sys.stdin.read()
+                                   .decode('utf-8', errors='replace')))
