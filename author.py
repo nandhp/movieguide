@@ -168,36 +168,35 @@ def write_vitals(movie):
         else:
             temp_list.append("%d h %d min" % (hrs, mins,))
 
-    # FIRST LINE: title, IMDb link, certificate, color info, running time
+    # FIRST LINE: title, IMDb link
     extra_info = ', '.join(temp_list)
     if extra_info:
         extra_info = '['+extra_info+']'
     url = imdb_url(movie)
-    review = '**[%s](%s)** %s    \n' % (escape_markdown(movie['title']),
-        url, extra_info)
-    # OPTIONAL LINE: actual title, if not original title, that was best match 
+    review = '### **[%s](%s)**\n\n' % (escape_markdown(movie['title']), url)
+    # OPTIONAL: actual title, if not original title, that was the best match
     if 'aka' in movie and movie['aka']:
-        review += '&nbsp;&nbsp;&nbsp; a.k.a. **%s**    \n' % \
-                  (escape_markdown(movie['aka']),)
+        review += '&nbsp;&nbsp;&nbsp; a.k.a. **%s**\n\n' % \
+            (escape_markdown(movie['aka']),)
 
-    # SECOND LINE: genres
+    # SECOND LINE: genres and extra info (certificate, running time)
     if movie['genres']:
         review += ', '.join(escape_markdown(g) for g in movie['genres'])
     else:
         review += 'Unclassified'
-    review += "\n\n"
+    review += ' %s\n\n' % (extra_info,)
 
     # THIRD LINE: Cast, directors, writers.
     names_strs = [', '.join(munge_name(i[0]) for i in movie[field][:4])
         for field in 'cast', 'directors', 'writers']
     if movie['cast']:
-        review += names_strs[0] + "    \n" # Cast
+        review += names_strs[0] + "  \n" # Cast
     if movie['directors']:
         plural = 'Director' if len(movie['directors']) == 1 else 'Directors'
         review += "%s: %s" % (plural, names_strs[1])
     if movie['writers']:
         if movie['directors']:
-            review += '; '
+            review += '  \n'
         plural = 'Writer' if len(movie['writers']) == 1 else 'Writers'
         review += "%s: %s" % (plural, names_strs[2])
     return { 'vitals': review, 'IMDb_url': url }
@@ -208,8 +207,9 @@ def write_plot(movie):
     # Compute star rating
     rating_int = int(round(float(movie["rating"][2])))
     if rating_int > 0:
-        rating_str = "&#9733;" * rating_int + "&#9734;" * (10 - rating_int) \
-            + " %s/10 (%s votes)" % \
+        rating_str = "[](#movieguide_stars)**" + \
+            "&#9733;" * rating_int + "&#9734;" * (10 - rating_int) \
+            + "** **%s**/10 (%s votes)" % \
             (movie["rating"][2], grouped_num(movie["rating"][1]))
     else:
         rating_str = "Unknown; awaiting five votes"
