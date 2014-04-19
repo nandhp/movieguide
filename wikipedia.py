@@ -94,10 +94,13 @@ PARA_RE = re.compile(r'\s*\n\s*', flags=re.UNICODE)
 CRITICAL_KEYWORDS = (
     # Newspapers and magazines
     'Times', 'Herald', 'Chronicle', 'Post', 'Tribune', 'Globe', 'Mail',
-    'Star', 'Rolling', 'Stone', 'Edition', 'Today', 'Daily', 'Weekly',
+    'Rolling', 'Stone', 'Edition', 'Today', 'Daily', 'Weekly',
     'Guide', 'Journal', 'Guardian',
+    # 'Star', too ambiguous
     # Critics and aggregators
     'Ebert', 'Rotten', 'Metacritic', 'CinemaScore',
+    # General keywords
+    'eview', # Review, review, reviews, reviewed, previews, ...
     )
 
 WIKI_URL = "http://%s.wikipedia.org/w/index.php?curid=%s&action=render"
