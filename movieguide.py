@@ -117,6 +117,8 @@ class MovieGuide(object):
         r_conf['mode'] = config_get(config, 'reddit', 'mode', 'new')
         r_conf['limit'] = config_get(config, 'reddit', 'limit', 100)
         r_conf['flairclass'] = config_get(config, 'reddit', 'flairclass', None)
+        r_conf['genreflairsep'] = config_get(config, 'reddit',
+                                             'genreflairsep', ', ')
 
         # Heartbeat file
         self.heartbeatfile = config_get(config, 'settings', 'heartbeat', None)
@@ -131,8 +133,11 @@ class MovieGuide(object):
             subreddits = section[3:]
             # Read options from section
             settings = dict((i, config_get(config, section, i, r_conf[i]))
-                            for i in ('mode', 'limit', 'flairclass',))
+                            for i in ('mode', 'limit', 'flairclass',
+                                      'genreflairsep'))
             settings['limit'] = int(settings['limit'])
+            settings['genreflairsep'] = settings['genreflairsep'] \
+                .decode('string_escape')
 
             self.fetch.append((subreddits, settings))
             for sr in subreddits.split('+'):
@@ -263,7 +268,7 @@ class MovieGuide(object):
                         # FIXME: Organize, make more generic, flexible.
                         if 'genres' in movie and movie['genres']:
                             self.reddit.set_flair(subreddit, post,
-                                                  ', '.join(movie['genres']),
+                                                  settings['genreflairsep'].join(movie['genres']),
                                                   settings['flairclass'])
                         # Update flair first: In event of failure,
                         # repeated flair updates are less harmful than
