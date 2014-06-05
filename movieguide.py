@@ -178,7 +178,7 @@ class MovieGuide(object):
 
         # Get new submissions
         # Get correct PRAW function: new => get_new,
-        #                            top-year => get_top_from_year 
+        #                            top-year => get_top_from_year
         sr_get = getattr(sr, 'get_' + '_from_'.join(mode.split('-')))
         print "Checking for %s posts in %s..." % (mode, str(sr))
 
@@ -192,8 +192,10 @@ class MovieGuide(object):
             dbc.execute("SELECT * FROM history WHERE postid=?", [post.id])
             if not dbc.fetchone():
                 title = _htmlparser.unescape(post.title)
-                dbc.execute("INSERT INTO history(postid, posttitle, status)" +
-                    " VALUES (?, ?, ?)", [post.id, title, STATUS_WAITING])
+                dbc.execute("INSERT INTO history(postid, subreddit, " +
+                            "posttitle, status) VALUES (?, ?, ?, ?)",
+                            [post.id, post.subreddit.display_name, title,
+                             STATUS_WAITING])
                 count += 1
         self.db.commit()
         print "Discovered %d new posts." % count
@@ -208,8 +210,9 @@ class MovieGuide(object):
         """
 
         dbc = self.db.cursor()
-        pending = dbc.execute("SELECT postid, posttitle FROM history " +
-                              "WHERE status=? ORDER BY postid DESC",
+        pending = dbc.execute("SELECT postid, subreddit, posttitle " +
+                              "FROM history WHERE status=? " +
+                              "ORDER BY postid DESC",
                               [STATUS_WAITING]).fetchall()
 
         print "Processing %d posts." % len(pending)
@@ -218,7 +221,7 @@ class MovieGuide(object):
         end_time = time.time() + 2*INTERVAL*60
 
         for row in pending:
-            postid, posttitle = row
+            postid, subreddit, posttitle = row
             # Check if item has already been processed
             print (u"Found http://redd.it/%s %s" % (postid, posttitle)) \
                 .encode('utf-8')
