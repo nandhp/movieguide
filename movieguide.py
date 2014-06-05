@@ -79,6 +79,14 @@ def parse_title(desc):
     # What did we get?
     return [title, year]
 
+def config_get(config, section, key, default):
+    """Get a value from a ConfigParser, with a default value if the
+    key does not exist."""
+    try:
+        return config.get(section, key)
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+        return default
+
 DEFAULT_ERRORDELAY = 60
 
 class MovieGuide(object):
@@ -97,35 +105,38 @@ class MovieGuide(object):
         self.dbfile = config.get('settings', 'database')
 
         # Backup configuration
-        try:
-            self.backup_url = config.get('backup', 'url')
-        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-            self.backup_url = None
-        try:
-            self.backup_auth = (config.get('backup', 'username'),
-                                config.get('backup', 'password'))
-        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+        self.backup_url = config_get(config, 'backup', 'url', None)
+        self.backup_auth = (config_get(config, 'backup', 'username', None),
+                            config_get(config, 'backup', 'password', None))
+        if self.backup_auth[0] is None or self.backup_auth[1] is None:
             self.backup_auth = ()
         self.last_full = date.today()
         self.last_incr = datetime.min
 
-        # Subreddit and mode (new, top, etc.) settings
-        self.subreddit = config.get('reddit', 'subreddit')
-        try:
-            self.mode = config.get('reddit', 'mode')
-        except ConfigParser.NoOptionError:
-            self.mode = 'new'
-        try:
-            self.fetchlimit = int(config.get('reddit', 'limit'))
-        except ConfigParser.NoOptionError:
-            self.fetchlimit = 100
+        # Default listing settings: sort mode (new, top, etc.) and limit
+        r_conf['mode'] = config_get(config, 'reddit', 'mode', 'new')
+        r_conf['limit'] = config_get(config, 'reddit', 'limit', 100)
+        r_conf['flairclass'] = config_get(config, 'reddit', 'flairclass', None)
 
         # Heartbeat file
-        try:
-            self.heartbeatfile = config.get('settings', 'heartbeat')
-        except ConfigParser.NoOptionError:
-            self.heartbeatfile = None
+        self.heartbeatfile = config_get(config, 'settings', 'heartbeat', None)
         self.errordelay = DEFAULT_ERRORDELAY
+
+        # Subreddits and subreddit settings
+        self.fetch = []
+        self.subreddits = {}
+        for section in config.sections():
+            if not section.startswith('/r/'):
+                continue
+            subreddits = section[3:]
+            # Read options from section
+            settings = dict((i, config_get(config, section, i, r_conf[i]))
+                            for i in ('mode', 'limit', 'flairclass',))
+            settings['limit'] = int(settings['limit'])
+
+            self.fetch.append((subreddits, settings))
+            for sr in subreddits.split('+'):
+                self.subreddits[sr.lower()] = settings
 
         # Load footer
         self.footer = ''
@@ -160,14 +171,8 @@ class MovieGuide(object):
             heartbeatfh.close()
         self.errordelay = DEFAULT_ERRORDELAY
 
-    def fetch_new_posts(self, subreddit=None, mode=None):
+    def fetch_new_posts(self, subreddit, mode, limit):
         """Process new submissions to the subreddit."""
-
-        # Default to instance parameters
-        if subreddit is None:
-            subreddit = self.subreddit
-        if mode is None:
-            mode = self.mode
 
         # For decoding HTML entities, which still show up in the praw output
         _htmlparser = HTMLParser()
@@ -180,9 +185,9 @@ class MovieGuide(object):
         # Get correct PRAW function: new => get_new,
         #                            top-year => get_top_from_year
         sr_get = getattr(sr, 'get_' + '_from_'.join(mode.split('-')))
-        print "Checking for %s posts in %s..." % (mode, str(sr))
+        print "Checking for %d %s posts in %s..." % (limit, mode, str(sr))
 
-        posts = sr_get(limit=self.fetchlimit)
+        posts = sr_get(limit=limit)
         count = 0
         for post in posts:
             # FIXME: Track the most recent post that we've processed, continue
@@ -223,8 +228,8 @@ class MovieGuide(object):
         for row in pending:
             postid, subreddit, posttitle = row
             # Check if item has already been processed
-            print (u"Found http://redd.it/%s %s" % (postid, posttitle)) \
-                .encode('utf-8')
+            print (u"Found http://redd.it/%s %s in /r/%s" %
+                   (postid, posttitle, subreddit)).encode('utf-8')
 
             # Parse item titles
             title, year = parse_title(posttitle)
@@ -250,9 +255,21 @@ class MovieGuide(object):
                         return '(Error)'
                 comment_text += FOOTER_SUBST_RE.sub(footersubfunc, self.footer)
                 print comment_text.encode('utf-8')
-                # Post review as a comment
+                # Post review as a comment, maybe updating flair
                 post = praw.objects.Submission.from_id(self.reddit, postid)
                 try:
+                    settings = self.subreddits[subreddit.lower()]
+                    if settings['flairclass'] is not None:
+                        # FIXME: Organize, make more generic, flexible.
+                        if 'genres' in movie and movie['genres']:
+                            self.reddit.set_flair(subreddit, post,
+                                                  ', '.join(movie['genres']),
+                                                  settings['flairclass'])
+                        # Update flair first: In event of failure,
+                        # repeated flair updates are less harmful than
+                        # repeated comments
+
+                    # Post comment
                     comment = post.add_comment(comment_text)
                     comment_id = comment.id
                 except praw.errors.APIException, exception:
@@ -309,7 +326,8 @@ class MovieGuide(object):
         # fixed (We don't want to generate more data!)
 
         # Download new posts from reddit
-        self.fetch_new_posts()
+        for subreddit, options in self.fetch:
+            self.fetch_new_posts(subreddit, options['mode'], options['limit'])
 
         # Add reviews to new posts
         done = self.process_posts()

@@ -6,11 +6,16 @@
 username=MovieGuide
 password=secret
 
-# Subredit to monitor (a multireddit works too).
-subreddit=MovieGuide_sandbox+example+null
-
-# Mode for fetching {new,rising,hot,top-{hour,day,week,month,year,all}}.
+# Default fetch mode {new,rising,hot,top-{hour,day,week,month,year,all}}.
 mode=new
+
+# Subredits to monitor are defined by sections beginning with /r/
+# (a multireddit works too).
+[/r/MovieGuide_sandbox+example]
+
+# Another subreddit, which uses a different fetch mode.
+[/r/null]
+mode=hot
 
 [settings]
 
