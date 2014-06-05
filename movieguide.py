@@ -333,6 +333,7 @@ class MovieGuide(object):
         # Download new posts from reddit
         for subreddit, options in self.fetch:
             self.fetch_new_posts(subreddit, options['mode'], options['limit'])
+            time.sleep(2)
 
         # Add reviews to new posts
         done = self.process_posts()
