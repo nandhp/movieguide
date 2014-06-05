@@ -11,7 +11,7 @@ import re
 USER_AGENT = 'MovieGuide-wikipedia/0.1'
 
 SKIPTAGS = ('table', 'sup')
-NESTTAGS = ('div', 'span')
+NESTTAGS = ('div', 'span', 'a')
 HEADTAGS = tuple('h'+str(i) for i in range(6))
 SKIPSECTS = ("contents", "references", "see also", "external links", "notes")
 
@@ -45,6 +45,7 @@ class WikipediaTextifier(HTMLParser):
             aclass = adict.get('class', '')
             astyle = adict.get('style', '')
             if 'thumbcaption' in aclass or 'quotebox' in aclass or \
+                    'autonumber' in aclass or \
                     'display:none' in astyle or 'display: none' in astyle:
                 self.skip += 1
         elif tag in ('p', 'br'):
