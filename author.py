@@ -295,6 +295,9 @@ def write_wikipedia(fbdata, wpobj):
             "> %s (*Wikipedia*)" % (escape_markdown(wikidata['critical']),)
     if 'url' in wikidata:
         review['Wikipedia_url'] = wikidata['url']
+    for key in wikidata:
+        if key.endswith('_url'):
+            review[key] = wikidata[key]
     return review
 
 def write_freebase_xrefs(fbdata):
@@ -309,7 +312,8 @@ def write_freebase_xrefs(fbdata):
     return urls
 
 REVIEW_SECTIONS = ('vitals', 'plot', 'critical+awards', 'links')
-CROSSREF_URLS = ('IMDb', 'Freebase', 'Wikipedia', 'Netflix')
+CROSSREF_URLS = ('IMDb', 'Freebase', 'Wikipedia', 'Rotten Tomatoes',
+                 'Metacritic', 'Netflix')
 
 class Author(object):
     """Class for holding state variables relating to writing reviews."""

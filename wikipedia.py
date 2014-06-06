@@ -30,6 +30,8 @@ class WikipediaTextifier(HTMLParser):
         # Buffer for storing headings
         self.inheading = 0
         self.headingbuf = ""
+        # List of external links
+        self.links = []
 
     def _append(self, data):
         """Add data to the internal buffer"""
@@ -38,10 +40,16 @@ class WikipediaTextifier(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
+        adict = dict(attrs)
+        # Save external links
+        if tag == 'a' and 'external' in adict.get('class', '') and \
+                'href' in adict:
+            self.links.append(adict['href'])
+
+        # Track sections of the page to skip parsing
         if (self.skip and tag in NESTTAGS) or tag in SKIPTAGS:
             self.skip += 1
         elif tag in NESTTAGS:
-            adict = dict(attrs)
             aclass = adict.get('class', '')
             astyle = adict.get('style', '')
             if 'thumbcaption' in aclass or 'quotebox' in aclass or \
@@ -50,6 +58,8 @@ class WikipediaTextifier(HTMLParser):
                 self.skip += 1
         elif tag in ('p', 'br'):
             self._append("\n")
+
+        # Special handling for settings
         elif tag in HEADTAGS:
             level = int(tag[1])
             if level <= self.skipsect:
@@ -104,6 +114,11 @@ CRITICAL_KEYWORDS = (
     'eview', # Review, review, reviews, reviewed, previews, ...
     )
 
+XREF_RE = {
+    'Rotten Tomatoes': re.compile(r'//www\.rottentomatoes\.com/m/'),
+    'Metacritic': re.compile(r'//www\.metacritic\.com/(tv|movie)/'),
+    }
+
 WIKI_URL = "http://%s.wikipedia.org/w/index.php?curid=%s&action=render"
 class Wikipedia(object):
     """Interface to Wikipedia"""
@@ -116,8 +131,9 @@ class Wikipedia(object):
         result = {
             'critical': None, 'criticalsection': None,
             'url': 'https' + url[url.find(':'):url.rfind('&')] \
-                if url else None
+                if url else None,
             }
+
         # Critical response
         for my_re in CRITICAL_RES:
             match = my_re.search(parser.buffer)
@@ -137,6 +153,13 @@ class Wikipedia(object):
                     # If no such paragraph, return the first paragraph
                     result['critical'] = paras[0].strip()
                 break
+
+        # URLs for Rotten Tomatoes, Metacritic, etc.
+        for url in parser.links:
+            for name, re in XREF_RE.items():
+                if re.search(url):
+                    result[name + "_url"] = url
+
         return result
 
     last_access = 0
