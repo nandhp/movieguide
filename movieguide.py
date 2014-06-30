@@ -174,7 +174,7 @@ class MovieGuide(object):
         """Update heartbeat file (if configured) with current timestamp."""
         if self.heartbeatfile:
             heartbeatfh = open(self.heartbeatfile, 'w')
-            heartbeatfh.write('OK %s' % (time.time(),))
+            heartbeatfh.write('ALLOK %s' % (time.time(),))
             heartbeatfh.close()
         self.errordelay = DEFAULT_ERRORDELAY
 
