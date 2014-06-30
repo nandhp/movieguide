@@ -26,7 +26,7 @@ class WikipediaTextifier(HTMLParser):
         HTMLParser.__init__(self)
         self.buffer = ''
         self.skip = 0
-        self.skipsect = 10      # 10 = Skip introduction
+        self.skipsect = 0       # 10 = Skip introduction
         # Buffer for storing headings
         self.inheading = 0
         self.headingbuf = ""
@@ -53,7 +53,7 @@ class WikipediaTextifier(HTMLParser):
             aclass = adict.get('class', '')
             astyle = adict.get('style', '')
             if 'thumbcaption' in aclass or 'quotebox' in aclass or \
-                    'autonumber' in aclass or \
+                    'autonumber' in aclass or 'hatnote' in aclass or \
                     'display:none' in astyle or 'display: none' in astyle:
                 self.skip += 1
         elif tag in ('p', 'br'):
@@ -114,6 +114,12 @@ CRITICAL_KEYWORDS = (
     'eview', # Review, review, reviews, reviewed, previews, ...
     )
 
+INTRO_RE = re.compile(r'^\s*((?:\s*[^#\s].+)+)', flags=re.UNICODE|re.I)
+SUMMARY_RE = re.compile(r'the film(?! was)(?!(?: [a-z]*)+' +
+                        '(?:premiere|release|box office))' +
+                        r'|the stor[yi]|deals with|portray|depict',
+                        flags=re.UNICODE|re.I)
+
 XREF_RE = {
     'Rotten Tomatoes': re.compile(r'//www\.rottentomatoes\.com/m/'),
     'Metacritic': re.compile(r'//www\.metacritic\.com/(tv|movie)/'),
@@ -130,6 +136,7 @@ class Wikipedia(object):
         parser.feed(buf)
         result = {
             'critical': None, 'criticalsection': None,
+            'summary': None,
             'url': 'https' + url[url.find(':'):url.rfind('&')] \
                 if url else None,
             }
@@ -153,6 +160,19 @@ class Wikipedia(object):
                     # If no such paragraph, return the first paragraph
                     result['critical'] = paras[0].strip()
                 break
+
+        # Summary from introduction
+        match = INTRO_RE.search(parser.buffer)
+        if match:
+            paras = PARA_RE.split(match.group(1))
+            # Return the first paragraph containing a plot summary keyword
+            for para in paras:
+                if SUMMARY_RE.search(para):
+                    result['summary'] = para.strip()
+                    break
+            else:
+                # If no such paragraph, return the first paragraph
+                result['summary'] = paras[0].strip()
 
         # URLs for Rotten Tomatoes, Metacritic, etc.
         for url in parser.links:

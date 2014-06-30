@@ -205,6 +205,8 @@ def write_imdb_vitals(movie):
 def write_imdb_plot(movie):
     """Assemble IMDb rating and plot summary for a movie."""
 
+    review = {}
+
     # Compute star rating
     rating_int = int(round(float(movie["rating"][2])))
     if rating_int > 0:
@@ -214,18 +216,18 @@ def write_imdb_plot(movie):
             (movie["rating"][2], grouped_num(movie["rating"][1]))
     else:
         rating_str = "Unknown; awaiting five votes"
-    rating_str = "**IMDb rating:** %s" % (rating_str,)
+    review['rating'] = "**IMDb rating:** %s" % (rating_str,)
 
     # Plot summary
     if movie['plot'] and movie['plot'][0]:
-        plot_str = '> ' + escape_markdown(strip_qv(movie['plot'][0])) + \
+        review['plot'] = '> ' + escape_markdown(strip_qv(movie['plot'][0])) + \
             "\n(*%sIMDb*)" % (movie['plot'][1]+"/" if movie['plot'][1]
                               else '',)
     else:
         # Can't find a plot; let's just make something up.
-        plot_str = "> *%s*" % invent_plot(movie)
+        review['invented_plot'] = "> *%s*" % invent_plot(movie)
 
-    return { 'rating': rating_str, 'plot': plot_str }
+    return review
 
 # Award canonicalization
 CANONICAL_AWARD = {
@@ -309,6 +311,10 @@ def write_wikipedia(fbdata, wpobj):
         review['critical'] = "**Critical reception:**\n\n" + \
             "> %s\n(*Wikipedia*)" % (escape_markdown(wikidata['critical']),)
 
+    if 'summary' in wikidata and wikidata['summary']:
+        review['summary'] = "> %s\n(*Wikipedia*)" % \
+            (escape_markdown(wikidata['summary']),)
+
     if 'url' in wikidata:
         review['Wikipedia_url'] = wikidata['url']
     for key in wikidata:
@@ -317,7 +323,8 @@ def write_wikipedia(fbdata, wpobj):
 
     return review
 
-REVIEW_SECTIONS = ('vitals+rating', 'plot', 'critical+awards', 'links')
+REVIEW_SECTIONS = ('vitals+rating', 'plot|summary|invented_plot',
+                   'critical+awards', 'links')
 CROSSREF_URLS = ('IMDb', 'Freebase', 'Wikipedia', 'Rotten Tomatoes',
                  'Metacritic', 'Netflix')
 
@@ -359,7 +366,7 @@ class Author(object):
                 for j in i.split('+'):
                     for k in j.split('|'):
                         if k in review and review[k]:
-                            sect.append(review[j].strip())
+                            sect.append(review[k].strip())
                             break
                 sect = '\n\n'.join(i for i in sect if i).strip()
                 if sect:
