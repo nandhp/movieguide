@@ -301,7 +301,11 @@ def write_freebase_xrefs(fbdata):
 
 def write_wikipedia(fbdata, wpobj):
     """Assemble critical reception excerpt from Wikipedia article."""
-    enwiki = fbdata['wiki_en:key']
+    enwiki = fbdata['wiki_en:key'] or []
+    if len(enwiki) != 1:
+        # Freebase returned multiple Wikipedia links; don't try to disambiguate
+        return {}
+    enwiki = enwiki[0]
     if not enwiki or 'value' not in enwiki or not enwiki['value']:
         return {}
     wikidata = wpobj.by_curid(enwiki['value'])

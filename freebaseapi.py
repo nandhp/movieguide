@@ -31,11 +31,11 @@ QUERY = [{
                 "id": None,
                 "optional": True
                 }],
-        "wiki_en:key": {
+        "wiki_en:key": [{
             "/type/key/namespace": "/wikipedia/en_id",
             "value": None,
             "optional": True
-            },
+            }],
         "id": []
         }]
 
