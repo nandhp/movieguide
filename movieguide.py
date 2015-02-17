@@ -87,6 +87,13 @@ def config_get(config, section, key, default):
     except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
         return default
 
+def check_post_domain(post, domainlist):
+    """Check if a post's domain is in a given list, with special handling
+    for self posts."""
+    if None in domainlist and post.is_self:
+        return True
+    return post.domain in domainlist
+
 DEFAULT_ERRORDELAY = 60
 
 class MovieGuide(object):
@@ -117,10 +124,16 @@ class MovieGuide(object):
         r_conf['mode'] = config_get(config, 'reddit', 'mode', 'new')
         r_conf['limit'] = config_get(config, 'reddit', 'limit', 100)
         r_conf['flairclass'] = config_get(config, 'reddit', 'flairclass', None)
+        r_conf['exclude_domains'] = config_get(config, 'reddit',
+                                               'exclude_domains', '')
+        r_conf['include_domains'] = config_get(config, 'reddit',
+                                               'include_domains', '')
+
+        # FIXME: More general flair templating
         r_conf['genreflairsep'] = config_get(config, 'reddit',
                                              'genreflairsep', ', ')
         r_conf['genreflairdefault'] = config_get(config, 'reddit',
-                                             'genreflairdefault', None)
+                                                 'genreflairdefault', None)
 
         # Heartbeat file
         self.heartbeatfile = config_get(config, 'settings', 'heartbeat', None)
@@ -136,8 +149,13 @@ class MovieGuide(object):
             # Read options from section
             settings = dict((i, config_get(config, section, i, r_conf[i]))
                             for i in ('mode', 'limit', 'flairclass',
+                                      'exclude_domains', 'include_domains',
                                       'genreflairsep', 'genreflairdefault'))
             settings['limit'] = int(settings['limit'])
+            for i in 'exclude_domains', 'include_domains':
+                domains = (j.strip(',;') for j in settings[i].split())
+                settings[i] = [None if j == 'self' else j for j in domains]
+
             settings['genreflairsep'] = settings['genreflairsep'] \
                 .decode('string_escape')
 
@@ -178,8 +196,13 @@ class MovieGuide(object):
             heartbeatfh.close()
         self.errordelay = DEFAULT_ERRORDELAY
 
-    def fetch_new_posts(self, subreddit, mode, limit):
+    def fetch_new_posts(self, subreddit, options):
         """Process new submissions to the subreddit."""
+
+        mode = options['mode']
+        limit = options['limit']
+        inc_domains = options['include_domains']
+        exc_domains = options['exclude_domains']
 
         # For decoding HTML entities, which still show up in the praw output
         _htmlparser = HTMLParser()
@@ -195,8 +218,20 @@ class MovieGuide(object):
         print "Checking for %d %s posts in %s..." % (limit, mode, str(sr))
 
         posts = sr_get(limit=limit)
-        count = 0
+        nfound = 0
+        nskipped = 0
         for post in posts:
+            # Check post against include/exclude list of domains
+            if not inc_domains or not check_post_domain(post, inc_domains):
+                # We're not in the list of domains to include, if set.
+                if inc_domains:
+                    # The list was defined, so we're out.
+                    nskipped += 1
+                    continue
+                if exc_domains and check_post_domain(post, exc_domains):
+                    # Our domain is explicitly excluded.
+                    nskipped += 1
+                    continue
             # FIXME: Track the most recent post that we've processed, continue
             #        until we hit our last timestamp.
             # if lastsuccess < post.created_utc:
@@ -208,9 +243,9 @@ class MovieGuide(object):
                             "posttitle, status) VALUES (?, ?, ?, ?)",
                             [post.id, post.subreddit.display_name, title,
                              STATUS_WAITING])
-                count += 1
+                nfound += 1
         self.db.commit()
-        print "Discovered %d new posts." % count
+        print "Discovered %d new posts (%d skipped)." % (nfound, nskipped)
 
     def process_posts(self):
         """
@@ -264,6 +299,7 @@ class MovieGuide(object):
                 print comment_text.encode('utf-8')
                 # Post review as a comment, maybe updating flair
                 post = praw.objects.Submission.from_id(self.reddit, postid)
+                # FIXME: Skip if post.archived
                 try:
                     settings = self.subreddits[subreddit.lower()]
                     if settings['flairclass'] is not None:
@@ -280,7 +316,7 @@ class MovieGuide(object):
                     comment = post.add_comment(comment_text)
                     comment_id = comment.id
                 except praw.errors.APIException, exception:
-                    if exception.error_type in ('TOO_OLD','DELETED_LINK'):
+                    if exception.error_type in ('TOO_OLD', 'DELETED_LINK'):
                         print "[Can't post comment: archived by reddit]"
                     else:
                         raise
@@ -290,8 +326,8 @@ class MovieGuide(object):
             # Update database entry
             movietitle = movie['title'] if movie else None
             dbc.execute("UPDATE history SET status=?, commentid=?, title=?" +
-                " WHERE postid=?",
-                [comment_status, comment_id, movietitle, postid])
+                        " WHERE postid=?",
+                        [comment_status, comment_id, movietitle, postid])
             self.db.commit()
 
             # Report heartbeat
@@ -334,7 +370,7 @@ class MovieGuide(object):
 
         # Download new posts from reddit
         for subreddit, options in self.fetch:
-            self.fetch_new_posts(subreddit, options['mode'], options['limit'])
+            self.fetch_new_posts(subreddit, options)
             time.sleep(2)
 
         # Add reviews to new posts
