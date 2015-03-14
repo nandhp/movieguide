@@ -38,7 +38,7 @@ YEAR_RE = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d)' +
 STRIP2_RE = re.compile(r'\([^\)]*\)|\[[^\]]*\]|\{[^\}]*\}',
                        #|:.*| *[-,;] *$|^ *[-,;] *
                        flags=re.UNICODE)
-TITLE_RE = re.compile(r'\"(.+?)\"|^(.+)$', flags=re.UNICODE)
+TITLE_RE = re.compile(r'"(.+?)"', flags=re.UNICODE)
 #STRIP3_RE = re.compile(r'^The *', flags=re.I|re.UNICODE)
 FOOTER_SUBST_RE = re.compile(r'\{(\w+)\}', flags=re.UNICODE)
 
@@ -66,10 +66,11 @@ def parse_title(desc):
     # Now pull out something that looks like a title.
     match = TITLE_RE.search(desc)
     if match:
-        for group in match.group(1, 2):
-            if group:
-                title = group.strip()
-                break
+        #for group in match.group(1, 2):
+        #    if group:
+        #        title = group.strip()
+        #        break
+        title = match.group(1).strip()
     else:
         title = desc
     ## FIXME: Split on popular punctuation [-,;.:] to handle extra words
@@ -87,12 +88,74 @@ def config_get(config, section, key, default):
     except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
         return default
 
-def check_post_domain(post, domainlist):
-    """Check if a post's domain is in a given list, with special handling
-    for self posts."""
-    if None in domainlist and post.is_self:
+class PostFilter(object):
+    """Base class for post filters."""
+
+    def __init__(self, include, exclude):
+        self.include = include
+        self.exclude = exclude
+
+    def check(self, post):
+        """Check if a post passes through the filter. A post is accepted by
+        the filter if the include list is defined and the post is
+        included or if the exclude list is defined and the post is not
+        excluded.
+
+        """
+        if self.include is not None:
+            # If include criteria is specified, we must match ("only")
+            return self.satisfies(self.include, post)
+        if self.exclude is not None:
+            # If exclude criteria is specified, we must not match ("except")
+            return not self.satisfies(self.exclude, post)
         return True
-    return post.domain in domainlist
+
+    def satisfies(self, criteria, post):
+        """Check if a post satisfies a given criteria. Must be defined by the
+        subclass.
+
+        """
+        raise NotImplementedError
+
+class PostDomainFilter(PostFilter):
+    """Filter posts by domain name."""
+
+    def __init__(self, include, exclude):
+        super(PostDomainFilter, self).__init__(include, exclude)
+        self.include = self._parse_list(include)
+        self.exclude = self._parse_list(exclude)
+
+    @staticmethod
+    def _parse_list(val):
+        """Parse a list of domains (space-separated with possible commas)."""
+        if val is None:
+            return None
+        domains = (j.strip(',;') for j in val.split())
+        return [None if j == 'self' else j for j in domains]
+
+    def satisfies(self, domainlist, post):
+        """Check if a post's domain is in a given list, with special handling
+        for self posts.
+
+        """
+        if None in domainlist and post.is_self:
+            return True
+        return post.domain in domainlist
+
+class PostTitleRegExpFilter(PostFilter):
+    """Filter posts by regular expressions applied to title."""
+
+    def __init__(self, include, exclude):
+        super(PostTitleRegExpFilter, self).__init__(include, exclude)
+        self.include = re.compile(include, flags=re.I|re.UNICODE) \
+                       if include is not None else None
+        self.exclude = re.compile(exclude, flags=re.I|re.UNICODE) \
+                       if exclude is not None else None
+
+    def satisfies(self, regexp, post):
+        """Check if a post's domain is in a given list, with special handling
+        for self posts."""
+        return regexp.search(post.decoded_title)
 
 DEFAULT_ERRORDELAY = 60
 
@@ -124,10 +187,9 @@ class MovieGuide(object):
         r_conf['mode'] = config_get(config, 'reddit', 'mode', 'new')
         r_conf['limit'] = config_get(config, 'reddit', 'limit', 100)
         r_conf['flairclass'] = config_get(config, 'reddit', 'flairclass', None)
-        r_conf['exclude_domains'] = config_get(config, 'reddit',
-                                               'exclude_domains', '')
-        r_conf['include_domains'] = config_get(config, 'reddit',
-                                               'include_domains', '')
+        for key in ('exclude_domains', 'include_domains',
+                    'exclude_title', 'include_title'):
+            r_conf[key] = config_get(config, 'reddit', key, None)
 
         # FIXME: More general flair templating
         r_conf['genreflairsep'] = config_get(config, 'reddit',
@@ -150,11 +212,22 @@ class MovieGuide(object):
             settings = dict((i, config_get(config, section, i, r_conf[i]))
                             for i in ('mode', 'limit', 'flairclass',
                                       'exclude_domains', 'include_domains',
+                                      'exclude_title', 'include_title',
                                       'genreflairsep', 'genreflairdefault'))
             settings['limit'] = int(settings['limit'])
-            for i in 'exclude_domains', 'include_domains':
-                domains = (j.strip(',;') for j in settings[i].split())
-                settings[i] = [None if j == 'self' else j for j in domains]
+
+            settings['criteria'] = []
+
+            # List of included/excluded domains
+            for criteria_setting, criteria_class in (
+                    ('domains', PostDomainFilter),
+                    ('title', PostTitleRegExpFilter)
+            ):
+                criteria = criteria_class(
+                    settings['include_' + criteria_setting],
+                    settings['exclude_' + criteria_setting]
+                )
+                settings['criteria'].append(criteria)
 
             settings['genreflairsep'] = settings['genreflairsep'] \
                 .decode('string_escape')
@@ -201,8 +274,7 @@ class MovieGuide(object):
 
         mode = options['mode']
         limit = options['limit']
-        inc_domains = options['include_domains']
-        exc_domains = options['exclude_domains']
+        criteria = options['criteria']
 
         # For decoding HTML entities, which still show up in the praw output
         _htmlparser = HTMLParser()
@@ -221,28 +293,21 @@ class MovieGuide(object):
         nfound = 0
         nskipped = 0
         for post in posts:
-            # Check post against include/exclude list of domains
-            if not inc_domains or not check_post_domain(post, inc_domains):
-                # We're not in the list of domains to include, if set.
-                if inc_domains:
-                    # The list was defined, so we're out.
-                    nskipped += 1
-                    continue
-                if exc_domains and check_post_domain(post, exc_domains):
-                    # Our domain is explicitly excluded.
-                    nskipped += 1
-                    continue
+            post.decoded_title = _htmlparser.unescape(post.title)
+            # Check post against configured criteria
+            if not all(x.check(post) for x in criteria):
+                nskipped += 1
+                continue
             # FIXME: Track the most recent post that we've processed, continue
             #        until we hit our last timestamp.
             # if lastsuccess < post.created_utc:
             #     lastsuccess = post.created_utc
             dbc.execute("SELECT * FROM history WHERE postid=?", [post.id])
             if not dbc.fetchone():
-                title = _htmlparser.unescape(post.title)
                 dbc.execute("INSERT INTO history(postid, subreddit, " +
                             "posttitle, status) VALUES (?, ?, ?, ?)",
-                            [post.id, post.subreddit.display_name, title,
-                             STATUS_WAITING])
+                            [post.id, post.subreddit.display_name,
+                             post.decoded_title, STATUS_WAITING])
                 nfound += 1
         self.db.commit()
         print "Discovered %d new posts (%d skipped)." % (nfound, nskipped)
