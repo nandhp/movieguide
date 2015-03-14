@@ -32,14 +32,14 @@ STRIP1_RE = re.compile(r'(TV|HD|Full(?: Movie| HD)?|Fixed|'+
                        r'YouTube|Netflix|\d+x\d+|' +
                        r'^ *[\[\{]* *IJW *[\]\}:]*)',
                        #|[a-z]* *sub(title)?s?)',
-                       flags=re.I|re.UNICODE)
+                       flags=re.UNICODE|re.I)
 YEAR_RE = re.compile(r'^(.*?) *[\[\(\{] *(18[89]\d|19\d\d|20[012]\d)' +
                      r' *[\]\)\}]', flags=re.UNICODE)
 STRIP2_RE = re.compile(r'\([^\)]*\)|\[[^\]]*\]|\{[^\}]*\}',
                        #|:.*| *[-,;] *$|^ *[-,;] *
                        flags=re.UNICODE)
 TITLE_RE = re.compile(r'"(.+?)"', flags=re.UNICODE)
-#STRIP3_RE = re.compile(r'^The *', flags=re.I|re.UNICODE)
+#STRIP3_RE = re.compile(r'^The *', flags=re.UNICODE|re.I)
 FOOTER_SUBST_RE = re.compile(r'\{(\w+)\}', flags=re.UNICODE)
 
 def parse_title(desc):
@@ -147,9 +147,9 @@ class PostTitleRegExpFilter(PostFilter):
 
     def __init__(self, include, exclude):
         super(PostTitleRegExpFilter, self).__init__(include, exclude)
-        self.include = re.compile(include, flags=re.I|re.UNICODE) \
+        self.include = re.compile(include, flags=re.UNICODE|re.I) \
                        if include is not None else None
-        self.exclude = re.compile(exclude, flags=re.I|re.UNICODE) \
+        self.exclude = re.compile(exclude, flags=re.UNICODE|re.I) \
                        if exclude is not None else None
 
     def satisfies(self, regexp, post):

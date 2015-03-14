@@ -13,7 +13,7 @@ def dump(filename):
     for i in obj.stdout:
         yield i.strip()
     obj.wait()
-    assert(obj.returncode == 0)
+    assert obj.returncode == 0
 
 def gzip(data):
     """Compress a string with gzip."""
@@ -34,7 +34,7 @@ def gunzip_file(pathname, checksum=None):
     data = infh.read()
     infh.close()
     if checksum:
-        assert(hashlib.sha1(data).hexdigest() == checksum)
+        assert hashlib.sha1(data).hexdigest() == checksum
     return data
 
 def http_request(method, url, data, auth=(),
@@ -51,18 +51,18 @@ def http_request(method, url, data, auth=(),
         password_mgr.add_password(None, url, auth[0], auth[1])
     opener = urllib2.build_opener(urllib2.HTTPBasicAuthHandler(password_mgr),
                                   urllib2.HTTPHandler)
-    if method in ('PUT','POST'):
-        assert(data is not None)
+    if method in ('PUT', 'POST'):
+        assert data is not None
         request = MyRequest(url, data, headers={'Content-Type': mimetype})
     else:                       # A GET or PROPFIND request or something
-        assert(data is None)
+        assert data is None
         request = MyRequest(url)
     obj = opener.open(request, timeout=2*60)
     code = obj.getcode()
     if method == 'GET':
-        assert(code == 200)
+        assert code == 200
     else:
-        assert(code >= 200 and code < 300)
+        assert code >= 200 and code < 300
     return obj.read()
 
 def run_backup(database_file, remote, auth=(), full_backup=False, min_size=0):
@@ -173,7 +173,7 @@ def fetch_backup(localdir, remote, auth=(), keep_only=None):
         print filename
 
         # Track full backups for use in expiration
-        assert(fndata[1] in 'FI')
+        assert fndata[1] in 'FI'
         if fndata[1] == 'F' and keep_only:
             fullbackups.append(filename)
         # Check if the file is already downloaded
@@ -189,7 +189,7 @@ def fetch_backup(localdir, remote, auth=(), keep_only=None):
         outfh = open(filepath, 'wb')
         outfh.write(http_request('GET', fileurl, None, auth))
         outfh.close()
-        assert(os.path.getsize(filepath) == size)
+        assert os.path.getsize(filepath) == size
         # Verify checksum (fndata[2] = checksum)
         gunzip_file(filepath, fndata[2])
         print "  (OK)"
@@ -252,7 +252,7 @@ def restore_backup(localdir, outname):
             obj.stdin.write(data)
             obj.stdin.close()
             obj.wait()
-            assert(obj.returncode == 0)
+            assert obj.returncode == 0
     print "Done"
 
 def _main(argv):
@@ -260,7 +260,7 @@ def _main(argv):
     def _parse_userandpass(data):
         """Parse USERNAME:PASSWORD argument to --auth."""
         authdata = tuple(data.split(':', 1))
-        assert(len(authdata) == 2)
+        assert len(authdata) == 2
         return authdata
     parser = ArgumentParser()
     parser.add_argument('--remote', metavar='URL', type=str,
@@ -270,15 +270,15 @@ def _main(argv):
                         type=_parse_userandpass,
                         help='Username and password for remote directory')
     subparsers = parser.add_subparsers()
-    backup  = subparsers.add_parser('backup',
-                                    help='Perform a manual backup')
+    backup = subparsers.add_parser('backup',
+                                   help='Perform a manual backup')
     backup.add_argument('dbfile', metavar='DBFILE', type=str, nargs='?',
                         default='movieguide.db',
                         help='Database file to back up')
     backup.add_argument('--full', action='store_true', default=False,
                         help='Perform full backup instead of incremental')
-    fetch   = subparsers.add_parser('fetch',
-                                    help='Fetch data from the remote backup')
+    fetch = subparsers.add_parser('fetch',
+                                  help='Fetch data from the remote backup')
     fetch.add_argument('--keep-only', metavar='NUMBER', type=int, default=None,
                        help='Number of full backups to keep')
     fetch.add_argument('localdir', metavar='DIRECTORY',
@@ -297,7 +297,7 @@ def _main(argv):
     if args.mode == 'backup':
         run_backup(args.dbfile, args.remote, args.auth, full_backup=args.full)
     elif args.mode == 'fetch':
-        assert(args.keep_only is None or args.keep_only > 0)
+        assert args.keep_only is None or args.keep_only > 0
         fetch_backup(args.localdir, args.remote,
                      args.auth, keep_only=args.keep_only)
     elif args.mode == 'restore':

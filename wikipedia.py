@@ -94,13 +94,14 @@ class WikipediaTextifier(HTMLParser):
         self.handle_data(self.unescape('&#%s;' % (name,)))
 
 # Regular expressions for the critical reception section
-CRITICAL_RES = (re.compile(r'#+ (Critical.*)\s*\n((?:\s*[^#\s].+)+)',
-                           flags=re.UNICODE|re.I),
-                re.compile(r'#+ (Reception.*)\s*\n((?:\s*[^#\s].+)+)',
-                           flags=re.UNICODE|re.I),
-                re.compile(r'#+ (Reviews|Critics)\s*\n((?:\s*[^#\s].+)+)',
-                           flags=re.UNICODE|re.I),
-                )
+CRITICAL_RES = (
+    re.compile(r'#+ (Critical.*)\s*\n((?:\s*[^#\s].+)+)',
+               flags=re.UNICODE|re.I),
+    re.compile(r'#+ (Reception.*)\s*\n((?:\s*[^#\s].+)+)',
+               flags=re.UNICODE|re.I),
+    re.compile(r'#+ (Reviews|Critics)\s*\n((?:\s*[^#\s].+)+)',
+               flags=re.UNICODE|re.I),
+)
 PARA_RE = re.compile(r'\s*\n\s*', flags=re.UNICODE)
 CRITICAL_KEYWORDS = (
     # Newspapers and magazines

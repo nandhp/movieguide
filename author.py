@@ -15,7 +15,7 @@ def grouped_num(num, char=',', size=3):
         out.append(my_str[i-size:i])
         i -= size
     if i > 0:
-        assert(i < size)
+        assert i < size
         out.append(my_str[0:i])
     return char.join(reversed(out))
 
@@ -30,7 +30,7 @@ def escape_markdown(data):
     return MARKDOWN_SPECIAL_RE.sub(_replacement, data)
 
 QV_RE = re.compile(r"(?:'([^']+?)(?: \([A-Z]+\))?'|_([^_]+?)_) ?\(qv\)",
-                       flags=re.UNICODE)
+                   flags=re.UNICODE)
 def strip_qv(data):
     """Remove IMDb's qv-linking."""
     def _replacement(match):
@@ -188,7 +188,7 @@ def write_imdb_vitals(movie):
 
     # THIRD LINE: Cast, directors, writers.
     names_strs = [', '.join(munge_name(i[0]) for i in movie[field][:4])
-        for field in 'cast', 'directors', 'writers']
+                  for field in 'cast', 'directors', 'writers']
     if movie['cast']:
         review += names_strs[0] + "  \n" # Cast
     if movie['directors']:
@@ -200,7 +200,7 @@ def write_imdb_vitals(movie):
         plural = 'Writer' if len(movie['writers']) == 1 else 'Writers'
         review += "%s: %s" % (plural, names_strs[2])
 
-    return { 'vitals': review, 'IMDb_url': url }
+    return {'vitals': review, 'IMDb_url': url}
 
 def write_imdb_plot(movie):
     """Assemble IMDb rating and plot summary for a movie."""
@@ -233,11 +233,12 @@ def write_imdb_plot(movie):
 CANONICAL_AWARD = {
     'Razzie Award': 'Golden Raspberry Award',
 }
-MAJOR_AWARDS = ('Academy Award', 'Golden Globe Award',
-                'BAFTA Award', 'Golden Raspberry Award',
-                # FIXME: There's probably a few other awards that
-                # deserve special attention.
-                )
+MAJOR_AWARDS = (
+    'Academy Award', 'Golden Globe Award',
+    'BAFTA Award', 'Golden Raspberry Award'
+    # FIXME: There's probably a few other awards that deserve special
+    # attention.
+)
 
 def write_freebase_awards(fbdata):
     """Assemble award summary returned from Freebase."""
@@ -286,7 +287,7 @@ def write_freebase_awards(fbdata):
             review += "* Another %s\n" % summarize_counts(counts)
     elif counts[0]:
         review += "**Awards:** %s\n" % summarize_counts(counts)
-    return { 'awards': review.strip() }
+    return {'awards': review.strip()}
 
 def write_freebase_xrefs(fbdata):
     """Assemble cross-references from Freebase data."""
