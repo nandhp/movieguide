@@ -169,7 +169,7 @@ class MovieGuide(object):
         r_conf = dict((i, config.get('reddit', i)) for i in
                       ('username', 'password',))
         s_conf = dict((i, config.get('settings', i)) for i in
-                      ('imdburl',))
+                      ('imdburl','freebasekey'))
 
         # Database filename
         self.dbfile = config.get('settings', 'database')
@@ -259,7 +259,8 @@ class MovieGuide(object):
                           password=r_conf['password'])
 
         # IMDb API
-        self.author = author.Author(imdburl=s_conf['imdburl'])
+        self.author = author.Author(imdburl=s_conf['imdburl'],
+                                    freebasekey=s_conf['freebasekey'])
 
     def heartbeat(self):
         """Update heartbeat file (if configured) with current timestamp."""

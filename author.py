@@ -336,9 +336,9 @@ CROSSREF_URLS = ('IMDb', 'Freebase', 'Wikipedia', 'Rotten Tomatoes',
 class Author(object):
     """Class for holding state variables relating to writing reviews."""
 
-    def __init__(self, imdburl='http://localhost:8051/imdb'):
+    def __init__(self, imdburl='http://localhost:8051/imdb', freebasekey=None):
         self.imdb = jsonapi.IMDbAPI(imdburl)
-        self.freebaseapi = freebaseapi.FreebaseAPI()
+        self.freebaseapi = freebaseapi.FreebaseAPI(freebasekey)
         self.wikipedia = wikipedia.Wikipedia()
 
     def process_item(self, title, year):

@@ -44,6 +44,10 @@ class FreebaseAPI(object):
 
     last_access = 0
     interval = 1
+    key = None
+
+    def __init__(self, key=None):
+        self.key = key
 
     def by_imdbid(self, imdbid):
         """Query freebase via the MQL API and return a result."""
@@ -58,6 +62,8 @@ class FreebaseAPI(object):
         query = QUERY
         query[0]["/film/film/imdb_id"] = imdbid
         data = {'query': json.dumps(query)}
+        if self.key:
+            data['key'] = self.key
         url = 'https://www.googleapis.com/freebase/v1/mqlread/?%s' % \
             (urllib.urlencode(data))
 
