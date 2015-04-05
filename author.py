@@ -184,7 +184,7 @@ def write_imdb_vitals(movie):
         review += ', '.join(escape_markdown(g) for g in movie['genres'])
     else:
         review += 'Unclassified'
-    review += ' %s\n\n' % (extra_info,)
+    review += ' %s  \n' % (extra_info,)
 
     # THIRD LINE: Cast, directors, writers.
     names_strs = [', '.join(munge_name(i[0]) for i in movie[field][:4])
@@ -194,11 +194,11 @@ def write_imdb_vitals(movie):
     if movie['directors']:
         plural = 'Director' if len(movie['directors']) == 1 else 'Directors'
         review += "%s: %s" % (plural, names_strs[1])
-    if movie['writers']:
-        if movie['directors']:
-            review += '  \n'
-        plural = 'Writer' if len(movie['writers']) == 1 else 'Writers'
-        review += "%s: %s" % (plural, names_strs[2])
+    # if movie['writers']:
+    #     if movie['directors']:
+    #         review += '  \n'
+    #     plural = 'Writer' if len(movie['writers']) == 1 else 'Writers'
+    #     review += "%s: %s" % (plural, names_strs[2])
 
     return {'vitals': review, 'IMDb_url': url}
 
@@ -313,7 +313,7 @@ def write_wikipedia(fbdata, wpobj):
     review = {}
 
     if 'critical' in wikidata and wikidata['critical']:
-        review['critical'] = "**Critical reception:**\n\n" + \
+        review['critical'] = "**Critical reception:**\n" + \
             "> %s\n(*Wikipedia*)" % (escape_markdown(wikidata['critical']),)
 
     if 'summary' in wikidata and wikidata['summary']:
@@ -376,7 +376,7 @@ class Author(object):
                 sect = '\n\n'.join(i for i in sect if i).strip()
                 if sect:
                     buf.append(sect)
-            return (movie, "\n\n---\n\n".join(buf) + '  \n')
+            return (movie, "\n\n".join(buf) + '  \n')
         return (movie, None)
 
 def _main(title):
