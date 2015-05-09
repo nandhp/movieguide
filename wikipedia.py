@@ -116,9 +116,9 @@ CRITICAL_KEYWORDS = (
     )
 
 INTRO_RE = re.compile(r'^\s*((?:\s*[^#\s].+)+)', flags=re.UNICODE|re.I)
-SUMMARY_RE = re.compile(r'the film(?! was)(?!(?: [a-z]*)+' +
+SUMMARY_RE = re.compile(r'the film(?:\'s )? (?!was)(?!(?:[a-z]* )+' +
                         '(?:premiere|release|box office))' +
-                        r'|the stor[yi]|deals with|portray|depict',
+                        r'|the stor[yi]|deals with|portray|depict|follow',
                         flags=re.UNICODE|re.I)
 
 XREF_RE = {
