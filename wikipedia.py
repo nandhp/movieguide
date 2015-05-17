@@ -3,10 +3,11 @@ Extract information from Wikipedia articles about movies.
 """
 
 from HTMLParser import HTMLParser
-from time import time, sleep
 import urllib2
 import urllib
 import re
+
+import common
 
 USER_AGENT = 'MovieGuide-wikipedia/0.1'
 
@@ -126,7 +127,16 @@ XREF_RE = {
     'Metacritic': re.compile(r'//www\.metacritic\.com/(tv|movie)/'),
     }
 
-WIKI_URL = "http://%s.wikipedia.org/w/index.php?curid=%s&action=render"
+def url_from_curid(curid, lang='en'):
+    """Generate a Wikipedia URL from a curid."""
+    return "http://%s.wikipedia.org/w/index.php?curid=%s&action=render" % \
+        (urllib.quote(lang), urllib.quote(curid))
+
+def url_from_title(title, lang='en'):
+    """Generate a Wikipedia URL from a page title."""
+    return "http://%s.wikipedia.org/w/index.php?title=%s&action=render" % \
+        (urllib.quote(lang), urllib.quote(title))
+
 class Wikipedia(object):
     """Interface to Wikipedia"""
 
@@ -183,17 +193,12 @@ class Wikipedia(object):
 
         return result
 
-    last_access = 0
-    interval = 5
+    ratelimit = common.RateLimit(5)
 
     def by_url(self, url):
         """Load a Wikipedia article by URL, parse it, and return a result."""
 
-        # Wait an interval between requests
-        time_delta = self.last_access + self.interval - time()
-        if time_delta > 0:
-            sleep(time_delta)
-        self.last_access = time()
+        self.ratelimit.wait()
 
         # Request results
         headers = {'User-Agent': USER_AGENT}
@@ -204,16 +209,11 @@ class Wikipedia(object):
         # Parse and return response
         return self.parse(data, url=url)
 
-    def by_curid(self, curid, lang='en'):
-        """Load a Wikipedia article by 'curid' identifier; see `by_url`."""
-        return self.by_url(WIKI_URL % (urllib.quote(lang),
-                                       urllib.quote(curid)))
-
 if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1:
         for x in sys.argv[1:]:
-            print repr(Wikipedia().by_curid(x))
+            print repr(Wikipedia().by_url(url_from_curid(x)))
     else:
         print repr(Wikipedia.parse(sys.stdin.read()
                                    .decode('utf-8', errors='replace')))

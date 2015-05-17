@@ -6,7 +6,8 @@ Python interface to the Freebase MQL API
 import json
 import urllib2
 import urllib
-from time import time, sleep
+
+import common, wikipedia
 
 USER_AGENT = 'MovieGuide-freebaseapi/0.1'
 
@@ -39,11 +40,68 @@ QUERY = [{
         "id": []
         }]
 
+class FreebaseTopic(object):
+    def __init__(self, obj):
+        self.obj = obj
+
+    def wikipedia_url(self, lang='en'):
+        if lang != 'en':
+            return None
+        enwiki = self.obj['wiki_en:key'] or []
+        if len(enwiki) != 1:
+            # Freebase returned multiple Wikipedia links; don't try to
+            # disambiguate
+            return None
+        enwiki = enwiki[0]
+        if not enwiki or not enwiki.get('value', None):
+            return None
+        return wikipedia.url_from_curid(enwiki['value'])
+
+    def wikidata_url(self):
+        return None
+
+    def freebase_url(self):
+        if 'id' not in self.obj or not self.obj['id']:
+            return None
+        return "http://www.freebase.com%s" % (self.obj['id'][0],)
+
+    def rotten_tomatoes_url(self):
+        return None
+
+    def metacritic_url(self):
+        return None
+
+    def netflix_url(self):
+        key = '/film/film/netflix_id'
+        if key not in self.obj or not self.obj[key]:
+            return None
+        return "http://movies.netflix.com/WiMovie/%s" % (self.obj[key][0],)
+
+    def award_nominations(self):
+        return self.obj['/award/award_nominated_work/award_nominations']
+
+    def awards_won(self):
+        return self.obj['/award/award_winning_work/awards_won']
+
+    def __repr__(self):
+        return """<%s instance:
+  Wikipedia: %s
+  Wikidata: %s
+  Freebase: %s
+  Rotten Tomatoes: %s
+  Metacritic: %s
+  Netflix: %s
+  Award nominations: %s
+  Awards won: %s
+>""" % (self.__class__.__name__, self.wikipedia_url(),
+        self.wikidata_url(), self.freebase_url(),
+        self.rotten_tomatoes_url(), self.metacritic_url(),
+        self.netflix_url(), self.award_nominations(), self.awards_won())
+
 class FreebaseAPI(object):
     """Interface to the Freebase MQL API"""
 
-    last_access = 0
-    interval = 1
+    ratelimit = common.RateLimit(1)
     key = None
 
     def __init__(self, key=None):
@@ -52,11 +110,7 @@ class FreebaseAPI(object):
     def by_imdbid(self, imdbid):
         """Query freebase via the MQL API and return a result."""
 
-        # Wait an interval between requests
-        time_delta = self.last_access + self.interval - time()
-        if time_delta > 0:
-            sleep(time_delta)
-        self.last_access = time()
+        self.ratelimit.wait()
 
         # Build URL
         query = QUERY
@@ -76,7 +130,7 @@ class FreebaseAPI(object):
         # Parse and return response
         obj = json.loads(data)
         if 'result' in obj and len(obj['result']) > 0:
-            return obj['result'][0]
+            return FreebaseTopic(obj['result'][0])
         else:
             return None
 

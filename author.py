@@ -4,7 +4,7 @@ Review-writing module for MovieGuide
 
 import re, urllib, random
 from datetime import date
-import jsonapi, freebaseapi, wikipedia
+import jsonapi, freebaseapi, wikidata, wikipedia
 
 def grouped_num(num, char=',', size=3):
     """Impose digit grouping on integer num"""
@@ -253,8 +253,7 @@ def write_freebase_awards(fbdata):
     awards = {}
     awardval = 0
     counts = [0, 0]
-    for award in fbdata['/award/award_nominated_work/award_nominations'] + \
-            [None,] + fbdata['/award/award_winning_work/awards_won']:
+    for award in fbdata.award_nominations() + [None] + fbdata.awards_won():
         if not award:
             awardval = 1
             continue
@@ -290,48 +289,45 @@ def write_freebase_awards(fbdata):
     return {'awards': review.strip()}
 
 def write_freebase_xrefs(fbdata):
-    """Assemble cross-references from Freebase data."""
+    """Assemble cross-references from Freebase/Wikidata data."""
     urls = {}
-    for key, name, template in (("id", "Freebase",
-                                 "http://www.freebase.com%s"),
-                                ("/film/film/netflix_id", "Netflix",
-                                 "http://movies.netflix.com/WiMovie/%s")):
-        if key in fbdata and fbdata[key] and len(fbdata[key]):
-            urls[name + "_url"] = template % (escape_markdown(fbdata[key][0]),)
+    for name, url in (("Rotten Tomatoes", fbdata.rotten_tomatoes_url()),
+                      ("Metacritic", fbdata.metacritic_url()),
+                      ("Netflix", fbdata.netflix_url()),
+                      ("Wikidata", fbdata.wikidata_url()),
+                      ("Freebase", fbdata.freebase_url())):
+        key = name + "_url"
+        if not urls.get(key, None):
+            urls[key] = url
     return urls
 
-def write_wikipedia(fbdata, wpobj):
+def write_wikipedia(wikipedia, wikiurl):
     """Assemble critical reception excerpt from Wikipedia article."""
-    enwiki = fbdata['wiki_en:key'] or []
-    if len(enwiki) != 1:
-        # Freebase returned multiple Wikipedia links; don't try to disambiguate
+    if not wikiurl:
         return {}
-    enwiki = enwiki[0]
-    if not enwiki or 'value' not in enwiki or not enwiki['value']:
-        return {}
-    wikidata = wpobj.by_curid(enwiki['value'])
+    article = wikipedia.by_url(wikiurl)
     review = {}
 
-    if 'critical' in wikidata and wikidata['critical']:
+    if article.get('critical', None):
         review['critical'] = "**Critical reception:**\n" + \
-            "> %s\n(*Wikipedia*)" % (escape_markdown(wikidata['critical']),)
+            "> %s\n(*Wikipedia*)" % (escape_markdown(article['critical']),)
 
-    if 'summary' in wikidata and wikidata['summary']:
+    if article.get('summary', None):
         review['summary'] = "> %s\n(*Wikipedia*)" % \
-            (escape_markdown(wikidata['summary']),)
+            (escape_markdown(article['summary']),)
 
-    if 'url' in wikidata:
-        review['Wikipedia_url'] = wikidata['url']
-    for key in wikidata:
-        if key.endswith('_url'):
-            review[key] = wikidata[key]
+    if 'url' in article:
+        review['Wikipedia_url'] = article['url']
+    for key in article:
+        if key.endswith('_url') and not review.get(key, None):
+            review[key] = article[key]
 
     return review
 
 REVIEW_SECTIONS = ('vitals+rating', 'plot|summary|invented_plot',
                    'critical+awards', 'links')
-CROSSREF_URLS = ('IMDb', 'Freebase', 'Wikipedia', 'Rotten Tomatoes',
-                 'Metacritic', 'Netflix')
+CROSSREF_URLS = ('IMDb', 'Wikipedia', 'Rotten Tomatoes', 'Metacritic',
+                 'Netflix', 'Wikidata', 'Freebase')
 
 class Author(object):
     """Class for holding state variables relating to writing reviews."""
@@ -339,6 +335,7 @@ class Author(object):
     def __init__(self, imdburl='http://localhost:8051/imdb', freebasekey=None):
         self.imdb = jsonapi.IMDbAPI(imdburl)
         self.freebaseapi = freebaseapi.FreebaseAPI(freebasekey)
+        self.wikidata = wikidata.WikidataQuery()
         self.wikipedia = wikipedia.Wikipedia()
 
     def process_item(self, title, year):
@@ -355,11 +352,13 @@ class Author(object):
         # Check IMDb ID for cross-referencing
         if 'imdbid' in movie:
             # We have an IMDb ID, cross-reference to Freebase
-            fbdata = self.freebaseapi.by_imdbid(movie['imdbid'])
+            fbdata = self.freebaseapi.by_imdbid(movie['imdbid']) \
+                     or self.wikidata.by_imdbid(movie['imdbid'])
             if fbdata:
                 review.update(write_freebase_awards(fbdata))
                 review.update(write_freebase_xrefs(fbdata))
-                review.update(write_wikipedia(fbdata, self.wikipedia))
+                review.update(write_wikipedia(self.wikipedia,
+                                              fbdata.wikipedia_url()))
         # A list of links to sources, etc.
         review['links'] = 'More info at ' + \
             ', '.join("[%s](%s)" % (i, review[i+'_url']) for i in CROSSREF_URLS

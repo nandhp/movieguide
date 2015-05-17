@@ -6,7 +6,8 @@ Python interface to the JSON API implemented by imdb/wsgi.py
 import json
 import urllib2
 import urllib
-from time import time, sleep
+
+import common
 
 USER_AGENT = 'MovieGuide-jsonapi/0.1'
 
@@ -23,8 +24,7 @@ class IMDbError(Exception):
 class IMDbAPI(object):
     """Interface to the JSON API implemented by imdb/wsgi.py"""
 
-    last_access = 0
-    interval = 1
+    ratelimit = common.RateLimit(1)
 
     def __init__(self, endpoint):
         self.endpoint = endpoint
@@ -32,11 +32,7 @@ class IMDbAPI(object):
     def search(self, query, year=None):
         """Perform a query via the API and return the results."""
 
-        # Wait an interval between requests
-        time_delta = self.last_access + self.interval - time()
-        if time_delta > 0:
-            sleep(time_delta)
-        self.last_access = time()
+        self.ratelimit.wait()
 
         # Build URL
         data = {'q': unicode(query).encode('utf-8')}
