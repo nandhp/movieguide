@@ -49,7 +49,7 @@ class WikidataItem(object):
         return values
 
     def get_sitelink(self, wiki):
-        sitelinks = self.obj['sitelinks']
+        sitelinks = self.obj.get('sitelinks', {})
         if wiki not in sitelinks:
             return None
         assert 'title' in sitelinks[wiki]
