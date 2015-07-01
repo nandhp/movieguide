@@ -135,7 +135,7 @@ def url_from_curid(curid, lang='en'):
 def url_from_title(title, lang='en'):
     """Generate a Wikipedia URL from a page title."""
     return "http://%s.wikipedia.org/w/index.php?title=%s&action=render" % \
-        (urllib.quote(lang), urllib.quote(title))
+        (urllib.quote(lang), urllib.quote(unicode(title).encode('utf-8')))
 
 class Wikipedia(object):
     """Interface to Wikipedia"""
