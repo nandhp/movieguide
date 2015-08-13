@@ -134,9 +134,8 @@ class WikidataQuery(object):
         # Return response
         assert obj['status']['error'] == 'OK' and 'items' in obj
         assert len(obj['items']) == obj['status']['items']
-        assert len(obj['items']) <= 1
         if obj['items']:
-            return WikidataItem(obj['items'][0])
+            return WikidataItem(max(obj['items']))
         else:
             return None
 
