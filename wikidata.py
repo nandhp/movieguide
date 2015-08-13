@@ -30,7 +30,8 @@ class WikidataItem(object):
 
         # Extract object from response
         self.obj = json.loads(data)
-        assert self.obj['entities'] and self.key in self.obj['entities']
+        assert self.obj['entities'] and len(self.obj['entities']) == 1
+        self.key = self.obj['entities'].iterkeys().next() # Handle redirects
         self.obj = self.obj['entities'][self.key]
 
     def get_claim(self, prop):
