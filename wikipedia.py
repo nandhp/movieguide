@@ -203,8 +203,15 @@ class Wikipedia(object):
         # Request results
         headers = {'User-Agent': USER_AGENT}
         req = urllib2.Request(url, None, headers)
-        response = urllib2.urlopen(req, timeout=8*60)
-        data = response.read().decode('utf-8', errors='replace')
+        try:
+            response = urllib2.urlopen(req, timeout=8*60)
+        except urllib2.HTTPError as e:
+            if e.code < 400 or e.code > 499:
+                raise
+            data = ''
+            print "Ignoring error %d from Wikipedia" % (e.code,)
+        else:
+            data = response.read().decode('utf-8', errors='replace')
 
         # Parse and return response
         return self.parse(data, url=url)
