@@ -41,7 +41,7 @@ class WikidataItem(object):
         values = []
         for v in claims[prop]:
             snak = v['mainsnak']
-            if snak['datatype'] == 'string':
+            if snak['datatype'] in ('string', 'external-id'):
                 assert snak['datavalue']['type'] == 'string'
                 values.append(snak['datavalue']['value'])
             else:
