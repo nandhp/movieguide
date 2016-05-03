@@ -4,7 +4,7 @@ Review-writing module for MovieGuide
 
 import re, urllib, random
 from datetime import date
-import jsonapi, freebaseapi, wikidata, wikipedia
+import jsonapi, wikidata, wikipedia
 
 def grouped_num(num, char=',', size=3):
     """Impose digit grouping on integer num"""
@@ -334,7 +334,6 @@ class Author(object):
 
     def __init__(self, imdburl='http://localhost:8051/imdb', freebasekey=None):
         self.imdb = jsonapi.IMDbAPI(imdburl)
-        self.freebaseapi = freebaseapi.FreebaseAPI(freebasekey)
         self.wikidata = wikidata.WikidataQuery()
         self.wikipedia = wikipedia.Wikipedia()
 
@@ -352,8 +351,7 @@ class Author(object):
         # Check IMDb ID for cross-referencing
         if 'imdbid' in movie:
             # We have an IMDb ID, cross-reference to Freebase
-            fbdata = self.freebaseapi.by_imdbid(movie['imdbid']) \
-                     or self.wikidata.by_imdbid(movie['imdbid'])
+            fbdata = self.wikidata.by_imdbid(movie['imdbid'])
             if fbdata:
                 review.update(write_freebase_awards(fbdata))
                 review.update(write_freebase_xrefs(fbdata))
