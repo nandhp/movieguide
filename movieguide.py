@@ -382,8 +382,10 @@ class MovieGuide(object):
                     comment = post.add_comment(comment_text)
                     comment_id = comment.id
                 except praw.errors.APIException, exception:
-                    if exception.error_type in ('TOO_OLD', 'DELETED_LINK'):
-                        print "[Can't post comment: archived by reddit]"
+                    if exception.error_type in ('TOO_OLD', 'DELETED_LINK',
+                                                'THREAD_LOCKED'):
+                        print "[Can't post comment: %s]" % \
+                            (exception.error_type,)
                     else:
                         raise
             else:
