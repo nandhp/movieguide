@@ -164,7 +164,7 @@ class WikidataQuery(object):
             return int(itemurl[len(prefix):], 10)
         return [_itemid(x) for x in obj['results']['bindings']]
 
-    def by_imdb(self, imdbid):
+    def by_imdbid(self, imdbid):
         """Query Wikidata and return a result."""
 
         self.ratelimit.wait()
