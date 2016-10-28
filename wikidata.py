@@ -114,31 +114,68 @@ class WikidataQuery(object):
     def __init__(self):
         pass
 
-    def by_imdbid(self, imdbid):
-        """Query Wikidata via WikidataQuery API and return a result."""
-
-        self.ratelimit.wait()
+    def _by_imdbid_wql(self, imdbid):
+        """Query Wikidata via WikidataQuery API and return results."""
 
         # Build URL
         query = 'STRING[345:"%s"]' % (imdbid,)
-        data = {'q': query}
         url = 'https://wdq.wmflabs.org/api?%s' % \
-              (urllib.urlencode(data),)
+              (urllib.urlencode({'q': query}),)
 
         # Request results
-        headers = {'User-Agent': USER_AGENT}
-        req = urllib2.Request(url, None, headers)
+        req = urllib2.Request(url, None, {'User-Agent': USER_AGENT})
         response = urllib2.urlopen(req, timeout=8*60)
-        data = response.read()
-        obj = json.loads(data)
+        obj = json.load(response)
+        response.close()
 
         # Return response
         assert obj['status']['error'] == 'OK' and 'items' in obj
         assert len(obj['items']) == obj['status']['items']
-        if obj['items']:
-            return WikidataItem(min(obj['items']))
+        return obj['items']
+
+    def _by_imdbid_sparql(self, imdbid):
+        """Query Wikidata via SPARQL API and return results."""
+
+        self.ratelimit.wait()
+
+        # Build URL
+        query = 'SELECT ?item WHERE { ?item wdt:P345 "%s" . }' % (imdbid,)
+        url = 'https://query.wikidata.org/sparql?%s' % \
+              (urllib.urlencode({'query': query, 'format': 'json'}),)
+
+        # Request results
+        req = urllib2.Request(url, None, {'User-Agent': USER_AGENT})
+        response = urllib2.urlopen(req, timeout=8*60)
+        obj = json.load(response)
+        response.close()
+
+        # Return response
+        assert 'results' in obj and 'bindings' in obj['results']
+        assert 'head' in obj and 'vars' in obj['head'] and \
+            'item' in obj['head']['vars']
+
+        def _itemid(item):
+            assert 'item' in item
+            item = item['item']
+            assert 'type' in item and item['type'] == 'uri' and 'value' in item
+            itemurl = item['value']
+            prefix = 'http://www.wikidata.org/entity/Q'
+            assert itemurl.startswith(prefix)
+            return int(itemurl[len(prefix):], 10)
+        return [_itemid(x) for x in obj['results']['bindings']]
+
+    def by_imdb(self, imdbid):
+        """Query Wikidata and return a result."""
+
+        self.ratelimit.wait()
+        items = self._by_imdbid_sparql(imdbid)
+
+        if items:
+            return WikidataItem(min(items))
         else:
             return None
+
+
 
 if __name__ == '__main__':
     import sys
