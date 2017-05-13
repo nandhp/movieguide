@@ -159,6 +159,16 @@ class PostTitleRegExpFilter(PostFilter):
 
 DEFAULT_ERRORDELAY = 60
 
+def parse_bool(s):
+    if isinstance(s, int) or isinstance(s, bool):
+        return bool(s)
+    s = str(s).strip().lower()
+    if s in ('1', 't', 'true', 'y', 'yes'):
+        return True
+    if s in ('0', 'f', 'false', 'n', 'no'):
+        return False
+    raise ValueError("Can't parse boolean from %s" % (s,))
+
 class MovieGuide(object):
     """Class encapsulating variables for the bot."""
 
@@ -197,6 +207,10 @@ class MovieGuide(object):
         r_conf['genreflairdefault'] = config_get(config, 'reddit',
                                                  'genreflairdefault', None)
 
+        # Title parsing settings
+        r_conf['prefer_series'] = config_get(config, 'reddit',
+                                             'prefer_series', False)
+
         # Heartbeat file
         self.heartbeatfile = config_get(config, 'settings', 'heartbeat', None)
         self.errordelay = DEFAULT_ERRORDELAY
@@ -213,8 +227,10 @@ class MovieGuide(object):
                             for i in ('mode', 'limit', 'flairclass',
                                       'exclude_domains', 'include_domains',
                                       'exclude_title', 'include_title',
-                                      'genreflairsep', 'genreflairdefault'))
+                                      'genreflairsep', 'genreflairdefault',
+                                      'prefer_series'))
             settings['limit'] = int(settings['limit'])
+            settings['prefer_series'] = parse_bool(settings['prefer_series'])
 
             settings['criteria'] = []
 
@@ -339,8 +355,13 @@ class MovieGuide(object):
             print (u"Found http://redd.it/%s %s in /r/%s" %
                    (postid, posttitle, subreddit)).encode('utf-8')
 
+            # Get per-subreddit settings
+            settings = self.subreddits[subreddit.lower()]
+
             # Parse item titles
             title, year = parse_title(posttitle)
+            if settings['prefer_series'] and '"' not in title:
+                title = '"' + title + '"'
             print (u"Parsed title: %s (%s)" % (title, str(year))) \
                 .encode('utf-8')
 
@@ -367,7 +388,6 @@ class MovieGuide(object):
                 post = praw.objects.Submission.from_id(self.reddit, postid)
                 # FIXME: Skip if post.archived
                 try:
-                    settings = self.subreddits[subreddit.lower()]
                     if settings['flairclass'] is not None:
                         # FIXME: Organize, make more generic, flexible.
                         if 'genres' in movie and (movie['genres'] or settings['genreflairdefault']):
