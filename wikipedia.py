@@ -185,6 +185,12 @@ class Wikipedia(object):
                 # If no such paragraph, return the first paragraph
                 result['summary'] = paras[0].strip()
 
+        # Avoid accidental JavaScript
+        for data in (x for x in (result['summary'], result['critical']) if x):
+            for check in ('function mfTemp', 'document.getElement',
+                          '.className', ';}', '){', '{var'):
+                assert check not in result['summary']
+
         # URLs for Rotten Tomatoes, Metacritic, etc.
         for url in parser.links:
             for name, re in XREF_RE.items():
