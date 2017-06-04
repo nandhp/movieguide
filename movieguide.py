@@ -102,13 +102,14 @@ class PostFilter(object):
         excluded.
 
         """
+        rc = True
         if self.include is not None:
             # If include criteria is specified, we must match ("only")
-            return self.satisfies(self.include, post)
-        if self.exclude is not None:
+            rc = self.satisfies(self.include, post)
+        if rc and self.exclude is not None:
             # If exclude criteria is specified, we must not match ("except")
-            return not self.satisfies(self.exclude, post)
-        return True
+            rc = not self.satisfies(self.exclude, post)
+        return rc
 
     def satisfies(self, criteria, post):
         """Check if a post satisfies a given criteria. Must be defined by the
@@ -135,9 +136,7 @@ class PostDomainFilter(PostFilter):
 
     def satisfies(self, domainlist, post):
         """Check if a post's domain is in a given list, with special handling
-        for self posts.
-
-        """
+        for self posts."""
         if None in domainlist and post.is_self:
             return True
         return post.domain in domainlist
@@ -153,9 +152,25 @@ class PostTitleRegExpFilter(PostFilter):
                        if exclude is not None else None
 
     def satisfies(self, regexp, post):
-        """Check if a post's domain is in a given list, with special handling
-        for self posts."""
+        """Check if a post's title matches the given regexp."""
         return regexp.search(post.decoded_title)
+
+class PostFlairRegExpFilter(PostFilter):
+    """Filter posts by regular expressions applied to flair."""
+
+    def __init__(self, include, exclude):
+        super(PostFlairRegExpFilter, self).__init__(include, exclude)
+        self.include = re.compile(include, flags=re.UNICODE|re.I|re.MULTILINE) \
+                       if include is not None else None
+        self.exclude = re.compile(exclude, flags=re.UNICODE|re.I|re.MULTILINE) \
+                       if exclude is not None else None
+
+    def satisfies(self, regexp, post):
+        """Check if a post's flair class or flair text is in a given list. The
+        first line is the class, the second is the text. A MULTILINE
+        regexp is used, so ^ and $ match the beginning and end of each line."""
+        return regexp.search("%s\n%s" % (post.link_flair_css_class,
+                                         post.link_flair_text))
 
 DEFAULT_ERRORDELAY = 60
 
@@ -219,7 +234,8 @@ class MovieGuide(object):
         r_conf['limit'] = config_get(config, 'reddit', 'limit', 100)
         r_conf['flairclass'] = config_get(config, 'reddit', 'flairclass', None)
         for key in ('exclude_domains', 'include_domains',
-                    'exclude_title', 'include_title'):
+                    'exclude_title', 'include_title',
+                    'exclude_flair', 'include_flair'):
             r_conf[key] = config_get(config, 'reddit', key, None)
 
         # FIXME: More general flair templating
@@ -248,6 +264,7 @@ class MovieGuide(object):
                             for i in ('mode', 'limit', 'flairclass',
                                       'exclude_domains', 'include_domains',
                                       'exclude_title', 'include_title',
+                                      'exclude_flair', 'include_flair',
                                       'genreflairsep', 'genreflairdefault',
                                       'prefer_series'))
             settings['limit'] = int(settings['limit'])
@@ -258,7 +275,8 @@ class MovieGuide(object):
             # List of included/excluded domains
             for criteria_setting, criteria_class in (
                     ('domains', PostDomainFilter),
-                    ('title', PostTitleRegExpFilter)
+                    ('title', PostTitleRegExpFilter),
+                    ('flair', PostFlairRegExpFilter),
             ):
                 criteria = criteria_class(
                     settings['include_' + criteria_setting],
