@@ -1,2 +1,4 @@
-CREATE TABLE history (postid TEXT NOT NULL PRIMARY KEY, status INTEGER, subreddit TEXT, posttitle TEXT, commentid TEXT, title TEXT);
+CREATE TABLE history (postid TEXT NOT NULL PRIMARY KEY, status INTEGER, subreddit_id INTEGER, posttitle TEXT, commentid TEXT, title_id INTEGER);
+CREATE TABLE subreddit (subreddit_id INTEGER NOT NULL PRIMARY KEY, subreddit TEXT NOT NULL UNIQUE);
+CREATE TABLE title (title_id INTEGER NOT NULL PRIMARY KEY, title TEXT NOT NULL UNIQUE);
 

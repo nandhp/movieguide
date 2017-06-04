@@ -169,6 +169,27 @@ def parse_bool(s):
         return False
     raise ValueError("Can't parse boolean from %s" % (s,))
 
+class IDMap(object):
+    """Helper class to map string keys to numeric values."""
+
+    def __init__(self, dbh):
+        self.dbh = dbh
+
+    def lookup(self, column, value):
+        """Lookup the numeric value associated with the given string value for
+        a particular column."""
+
+        if value is None:
+            return None
+        dbc = self.dbh.cursor()
+        dbc.execute("INSERT OR IGNORE INTO {0} ({0}) VALUES (?)"
+                    .format(column), [value])
+        dbc.execute("SELECT {0}_id FROM {0} WHERE {0}=?"
+                    .format(column), [value])
+        row = dbc.fetchone()
+        assert row and row[0]
+        return row[0]
+
 class MovieGuide(object):
     """Class encapsulating variables for the bot."""
 
@@ -266,6 +287,7 @@ class MovieGuide(object):
         # Database for storing history
         print "Opening %s..." % self.dbfile
         self.db = sqlite3.connect(self.dbfile)
+        self.idmap = IDMap(self.db)
 
         # Access reddit
         print "Connecting..."
@@ -319,11 +341,13 @@ class MovieGuide(object):
             #        until we hit our last timestamp.
             # if lastsuccess < post.created_utc:
             #     lastsuccess = post.created_utc
-            dbc.execute("SELECT * FROM history WHERE postid=?", [post.id])
+            dbc.execute("SELECT 1 FROM history WHERE postid=?", [post.id])
             if not dbc.fetchone():
-                dbc.execute("INSERT INTO history(postid, subreddit, " +
+                subreddit_id = self.idmap.lookup('subreddit',
+                                                 post.subreddit.display_name)
+                dbc.execute("INSERT INTO history(postid, subreddit_id, " +
                             "posttitle, status) VALUES (?, ?, ?, ?)",
-                            [post.id, post.subreddit.display_name,
+                            [post.id, subreddit_id,
                              post.decoded_title, STATUS_WAITING])
                 nfound += 1
         self.db.commit()
@@ -340,8 +364,9 @@ class MovieGuide(object):
 
         dbc = self.db.cursor()
         pending = dbc.execute("SELECT postid, subreddit, posttitle " +
-                              "FROM history WHERE status=? " +
-                              "ORDER BY postid DESC",
+                              "FROM history " +
+                              "LEFT JOIN subreddit USING (subreddit_id) " +
+                              "WHERE status=? ORDER BY postid DESC",
                               [STATUS_WAITING]).fetchall()
 
         print "Processing %d posts." % len(pending)
@@ -412,9 +437,10 @@ class MovieGuide(object):
                 print "[Nothing to say]"
 
             # Update database entry
-            movietitle = movie['title'] if movie else None
-            dbc.execute("UPDATE history SET status=?, commentid=?, title=?" +
-                        " WHERE postid=?",
+            movietitle = self.idmap.lookup('title',
+                                           movie['title'] if movie else None)
+            dbc.execute("UPDATE history SET status=?, commentid=?, " +
+                        "title_id=? WHERE postid=?",
                         [comment_status, comment_id, movietitle, postid])
             self.db.commit()
 
