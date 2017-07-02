@@ -70,13 +70,9 @@ def run_backup(database_file, remote, auth=(), full_backup=False, min_size=0):
 
     # Filenames
     incr_file = database_file + '.incr'
-    temp_file = incr_file + '.tmp'
-
-    # Copy database
-    shutil.copy(database_file, temp_file)
 
     # Load new data
-    data = tuple(dump(temp_file))
+    data = tuple(dump(database_file))
 
     if not full_backup and os.path.exists(incr_file):
         # Load old data and perform incremental backup
@@ -117,7 +113,7 @@ def run_backup(database_file, remote, auth=(), full_backup=False, min_size=0):
         print message.as_string()
 
     # Save new incremental file
-    shutil.move(temp_file, incr_file)
+    shutil.copy(database_file, incr_file)
     return True
 
 FILENAME_RE = re.compile(r'^([0-9TZ]+)-([A-Z])-([0-9a-f]+)\.gz$', flags=re.I)
